@@ -10,7 +10,7 @@ name: Publish Docs
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push request events for all branches
+  # Triggers the workflow on push request events but only for the master or publish_docs branches
   push:
     tags:
       - '*'
@@ -85,7 +85,7 @@ jobs:
       - uses: actions/checkout@v3
         id: checkout-production
         with:
-          repository: atomvm/atomvm_www
+          repository: UncleGrumpy/atomvm_www
           ref: Production
           path: /home/runner/work/AtomVM/AtomVM/www
 
@@ -105,7 +105,7 @@ jobs:
           make GitHub_CI_Publish_Docs
 
       - name: Commit files
-        if: github.repository == 'atomvm/AtomVM'
+        if: github.repository == 'UncleGrumpy/AtomVM'
         working-directory: /home/runner/work/AtomVM/AtomVM/www
         run: |
           git checkout Production
@@ -114,14 +114,14 @@ jobs:
           git add .
           git commit -m "Update Documentation"
       - name: Push changes
-        if: github.repository == 'atomvm/AtomVM'
+        if: github.repository == 'UncleGrumpy/AtomVM'
         working-directory: /home/runner/work/AtomVM/AtomVM/www
         run: |
           eval `ssh-agent -t 60 -s`
           echo "${{ secrets.PUBLISH_ACTION_KEY }}" | ssh-add -
           mkdir -p ~/.ssh/
           ssh-keyscan github.com >> ~/.ssh/known_hosts
-          git remote add push_dest "git@github.com:atomvm/atomvm_www.git"
+          git remote add push_dest "git@github.com:UncleGrumpy/atomvm_www.git"
           git fetch push_dest
           git push --set-upstream push_dest Production
 
