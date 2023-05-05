@@ -80,8 +80,8 @@ exclude_patterns = ['*/favicon/about.txt']
 # The master toctree document.
 master_doc = 'index'
 
-highlight_language = 'c'
-primary_domain = 'c'
+highlight_language = 'C'
+primary_domain = 'C'
 
 # Breathe configuration
 breathe_projects = { "libatomvm": "@CMAKE_CURRENT_BINARY_DIR@/xml/" }
@@ -123,8 +123,6 @@ source_suffix = {
 
 html_favicon = '@CMAKE_CURRENT_SOURCE_DIR@/src/_static/favicon/favicon.ico'
 
-html_baseurl = 'https://atomvm.net/doc'
-
 ############################
 # SETUP THE RTD LOWER-LEFT #
 ############################
@@ -133,7 +131,8 @@ try:
 except NameError:
    html_context = dict()
 
-html_baseurl = 'https://atomvm.net/doc'
+#html_baseurl = 'https://atomvm.net/doc'
+html_baseurl = ('https://unclegrumpy.github.io/atomvm_www/doc')
 
 html_context['display_lower_left'] = 'True'
 
@@ -164,7 +163,7 @@ html_context['versions'] = list()
 
 print("Sphinx config found repository branches: %r." % (versions))
 for version in versions:
-    html_context['versions'].append( (version, '/doc/' +version+ '/') )
+    html_context['versions'].append( (version, '/atomvm_www/doc/' +version+ '/') )
 
 html_sidebars = {
     '**': [
@@ -188,5 +187,11 @@ epub_basename = project+ '-' +current_version
 
 # POPULATE LINKS TO OTHER FORMATS/DOWNLOADS
 html_context['downloads'] = list()
-html_context['downloads'].append( ('pdf', '/doc/' +current_version+ '/pdf/' +project+ '-' +current_version+ '.pdf') )
-html_context['downloads'].append( ('epub', '/doc/' +current_version+ '/epub/' +project+ '-' +current_version+ '.epub') )
+html_context['downloads'].append( ('pdf', '/atomvm_www/doc/' +current_version+ '/pdf/' +project+ '-' +current_version+ '.pdf') )
+html_context['downloads'].append( ('epub', '/atomvm_www/doc/' +current_version+ '/epub/' +project+ '-' +current_version+ '.epub') )
+
+# Display GitHub repo information in :Lower-Left: menu
+html_context['display_github'] = True
+html_context['github_user'] = 'atomvm'
+html_context['github_repo'] = 'AtomVM'
+html_context['github_version'] = 'master'
