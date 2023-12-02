@@ -27,7 +27,9 @@
 #include <autoconf.h>
 #include <devicetree_generated.h>
 #include <zephyr/drivers/flash.h>
+
 #include <zephyr/kernel.h>
+#include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/reboot.h>
 
 #include <avm_version.h>
@@ -42,10 +44,9 @@
 #include "lib/avm_log.h"
 #include "lib/zephyros_sys.h"
 
-#define AVM_ADDRESS (AVM_APP_ADDRESS)
-#define AVM_FLASH_END (CFG_FLASH_END)
-
 #define TAG "AtomVM"
+#define AVM_ADDRESS FIXED_PARTITION_OFFSET(app_partition)
+#define APP_MAX_SIZE FIXED_PARTITION_SIZE(app_partition)
 
 #define ATOMVM_BANNER                                                   \
     "\n"                                                                \

@@ -21,13 +21,10 @@
 #define _AVM_DEVCFG_H_
 
 #include <autoconf.h>
+#include <devicetree_generated.h>
+// #include <zephyr/storage/flash_map.h>
 
-#if (CONFIG_FLASH_SIZE == 512)
-#define AVM_APP_ADDRESS ((CONFIG_FLASH_BASE_ADDRESS) + 0x60000U)
-#else
-#define AVM_APP_ADDRESS ((CONFIG_FLASH_BASE_ADDRESS) + 0x80000U)
-#endif
-
-#define CFG_FLASH_END ((uint32_t) ((CONFIG_FLASH_BASE_ADDRESS) + ((CONFIG_FLASH_SIZE) *1024)))
+#define AVM_ADDRESS FIXED_PARTITION_OFFSET(app_partition)
+#define APP_MAX_SIZE FIXED_PARTITION_SIZE(app_partition)
 
 #endif /* _AVM_DEVCFG_H_ */

@@ -1,6 +1,7 @@
 #
 # This file is part of AtomVM.
 #
+# Copyright 2023 Adolfo E. García 
 # Copyright 2023 Winford (Uncle Grumpy) <winford@object.stream>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +17,38 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
-#
 
-CONFIG_KERNEL_BIN_NAME="AtomVM"
+rsource "$ZEPHYR_BASE/Kconfig"
+
+menu "AtomVM"
+config ATOMVM
+    bool "AtomVM"
+    default y
+    help
+        Enables the AtomVM Module
+    select CBPRINTF_PACKAGE_LONGDOUBLE
+    select CONSOLE_SUBSYS
+    select EMIT_ALL_SYSCALLS
+    select FLASH
+    select FLASH_MAP
+    select FLASH_MAP_CUSTOM
+    select FLASH_MAP_LABELS
+    select HAVE_CLOCK_SETTIME
+    select OUTPUT_PRINT_MEMORY_USAGE
+    select REQUIRES_FLOAT_PRINTF
+    select RTC
+    select STACK_USAGE
+    select UTF8
+
+    if ATOMVM
+    rsource "src/Kconfig"
+    endif
+
+if ATOMVM
+
+module = ATOMVM
+module-str = AtomVM
+
+endif
+
+endmenu

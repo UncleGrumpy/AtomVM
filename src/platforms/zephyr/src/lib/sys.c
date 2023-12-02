@@ -22,6 +22,7 @@
 #include <defaultatoms.h>
 #include <scheduler.h>
 #include <sys.h>
+#include <time.h>
 // #define ENABLE_TRACE
 #include <trace.h>
 

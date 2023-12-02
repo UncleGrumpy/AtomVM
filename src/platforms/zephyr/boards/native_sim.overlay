@@ -1,0 +1,60 @@
+/*
+* This file is part of AtomVM.
+*
+* Copyright 2023 Winford (Uncle Grumpy) <winford@object.stream>
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*    http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+* SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+*/
+
+flashcontroller0: flash-controller@0 {
+        compatible = "zephyr,sim-flash";
+        reg = <0x00000000 DT_SIZE_K(2048)>;
+
+        #address-cells = <1>;
+        #size-cells = <1>;
+        erase-value = <0xff>;
+
+        flash0: flash@0 {
+                status = "okay";
+                compatible = "soc-nv-flash";
+                erase-block-size = <4096>;
+                write-block-size = <1>;
+                reg = <0x00000000 DT_SIZE_K(2048)>;
+
+                partitions {
+                        compatible = "fixed-partitions";
+                        #address-cells = <1>;
+                        #size-cells = <1>;
+
+                        /* 48kB bootloader */
+                        boot_partition: partition@0 {
+                                label = "mcuboot";
+                                reg = <0x00000000 0x0000C000>;
+                        };
+
+                        /* 24kB NVS */
+                        nvs_partition: partition@c000 {
+                                label = "nvs";
+                                reg = <0x000C000 0x00004000>;
+                        };
+                        /* Remaining 1960kB for the main_avm application partition */
+                        app_partition: partition@10000 {
+                                label = "main_avm";
+                                reg = <0x00010000 0x001EA000>;
+                        };
+
+                };
+        };
+};

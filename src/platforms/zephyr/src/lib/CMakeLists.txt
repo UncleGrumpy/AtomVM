@@ -19,19 +19,21 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required (VERSION 3.20.5)
+cmake_minimum_required (VERSION 3.13)
 
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
-project (libAtomVM${PLATFORM_LIB_SUFFIX})
+project(libAtomVM${PLATFORM_LIB_SUFFIX})
 zephyr_library_named(libAtomVM${PLATFORM_LIB_SUFFIX})
+set_property(TARGET libAtomVM${PLATFORM_LIB_SUFFIX} PROPERTY CSTD 11)
 
 zephyr_include_directories(
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_BINARY_DIR}/libAtomVM
     ../../../../libAtomVM
-    ${CMAKE_BINARY_DIR}/zephyr/include/generated/
+    ${CMAKE_BINARY_DIR}/zephyr/include/generated
 )
 
 zephyr_library_sources(
@@ -40,9 +42,25 @@ zephyr_library_sources(
 )
 
 if(CMAKE_COMPILER_IS_GNUCC)
-    target_compile_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wall -pedantic -Wextra -ggdb)
+    target_compile_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wall -Wextra -ggdb)
 endif()
-set_property(TARGET libAtomVM${PLATFORM_LIB_SUFFIX} PROPERTY C_STANDARD 11)
 
-target_link_libraries(app PUBLIC libAtomVM${PLATFORM_LIB_SUFFIX})
+target_link_libraries(libAtomVM PUBLIC libAtomVM${PLATFORM_LIB_SUFFIX})
 target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LINK_OPTIONS} -Wl,--whole-archive ${CMAKE_CURRENT_BINARY_DIR}/liblibAtomVM${PLATFORM_LIB_SUFFIX}.a -Wl,--no-whole-archive)
+
+
+# zephyr_library_import(liblibAtomVM${PLATFORM_LIB_SUFFIX} ${CMAKE_CURRENT_BINARY_DIR}/liblibAtomVM${PLATFORM_LIB_SUFFIX}.a)
+# target_link_libraries(liblibAtomVM${PLATFORM_LIB_SUFFIX} INTERFACE kernel)
+
+
+
+
+
+####################################3
+
+# target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
+# target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LINK_OPTIONS} -Wl,--whole-archive ${CMAKE_CURRENT_BINARY_DIR}/liblibAtomVMGeneric-arm.a -Wl,--no-whole-archive)
+
+# target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} SYSTEM PUBLIC ${OPENCM3_INCLUDE})
+# target_link_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${OPENCM3_LIB})
+# target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${OPENCM3_RUNTIME})

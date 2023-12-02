@@ -19,6 +19,9 @@
 #
 
 cmake_minimum_required (VERSION 3.13)
+if (AVM_ZEPHYR_BUILD)
+    find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+endif()
 project (libAtomVM)
 
 set(HEADER_FILES
@@ -106,8 +109,9 @@ if (AVM_WARNINGS_ARE_ERRORS)
 endif()
 
 add_library(libAtomVM ${SOURCE_FILES} ${HEADER_FILES})
-target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_features(libAtomVM PUBLIC c_std_11)
+target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${ZLIB_INCLUDE_DIR})
+set_property(TARGET libAtomVM PROPERTY CSTD 11)
+
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(libAtomVM PUBLIC -Wall ${MAYBE_PEDANTIC_FLAG} ${MAYBE_WERROR_FLAG} -Wextra -ggdb -Werror=incompatible-pointer-types)
 elseif (CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -164,6 +168,24 @@ endif()
 
 include(DefineIfExists)
 # HAVE_OPEN & HAVE_CLOSE are used in globalcontext.h
+if (AVM_ZEPHYR_BUILD)
+define_if_function_exists(libAtomVM open "zephyr/posix/fcntl.h" PUBLIC HAVE_OPEN)
+define_if_function_exists(libAtomVM close "zephyr/posix/unistd.h" PUBLIC HAVE_CLOSE)
+define_if_function_exists(libAtomVM mkfifo "zephyr/posix/sys/stat.h" PRIVATE HAVE_MKFIFO)
+define_if_function_exists(libAtomVM unlink "zephyr/posix/unistd.h" PRIVATE HAVE_UNLINK)
+define_if_symbol_exists(libAtomVM O_CLOEXEC "zephyr/posix/fcntl.h" PRIVATE HAVE_O_CLOEXEC)
+define_if_symbol_exists(libAtomVM O_DIRECTORY "zephyr/posix/fcntl.h" PRIVATE HAVE_O_DIRECTORY)
+define_if_symbol_exists(libAtomVM O_DSYNC "zephyr/posix/fcntl.h" PRIVATE HAVE_O_DSYNC)
+define_if_symbol_exists(libAtomVM O_EXEC "zephyr/posix/fcntl.h" PRIVATE HAVE_O_EXEC)
+define_if_symbol_exists(libAtomVM O_NOFOLLOW "zephyr/posix/fcntl.h" PRIVATE HAVE_O_NOFOLLOW)
+define_if_symbol_exists(libAtomVM O_RSYNC "zephyr/posix/fcntl.h" PRIVATE HAVE_O_RSYNC)
+define_if_symbol_exists(libAtomVM O_SEARCH "zephyr/posix/fcntl.h" PRIVATE HAVE_O_SEARCH)
+define_if_symbol_exists(libAtomVM O_TTY_INIT "zephyr/posix/fcntl.h" PRIVATE HAVE_O_TTY_INIT)
+define_if_symbol_exists(libAtomVM clock_settime "zephyr/posix/time.h" PRIVATE HAVE_CLOCK_SETTIME)
+define_if_symbol_exists(libAtomVM settimeofday "zephyr/posix/sys/time.h" PRIVATE HAVE_SETTIMEOFDAY)
+define_if_symbol_exists(libAtomVM socket "zephyr/posix/sys/socket.h" PUBLIC HAVE_SOCKET)
+define_if_symbol_exists(libAtomVM select "zephyr/posix/sys/select.h" PUBLIC HAVE_SELECT)
+else()
 define_if_function_exists(libAtomVM open "fcntl.h" PUBLIC HAVE_OPEN)
 define_if_function_exists(libAtomVM close "unistd.h" PUBLIC HAVE_CLOSE)
 define_if_function_exists(libAtomVM mkfifo "sys/stat.h" PRIVATE HAVE_MKFIFO)
@@ -180,6 +202,7 @@ define_if_symbol_exists(libAtomVM clock_settime "time.h" PRIVATE HAVE_CLOCK_SETT
 define_if_symbol_exists(libAtomVM settimeofday "sys/time.h" PRIVATE HAVE_SETTIMEOFDAY)
 define_if_symbol_exists(libAtomVM socket "sys/socket.h" PUBLIC HAVE_SOCKET)
 define_if_symbol_exists(libAtomVM select "sys/select.h" PUBLIC HAVE_SELECT)
+endif()
 
 if (AVM_USE_32BIT_FLOAT)
     target_compile_definitions(libAtomVM PUBLIC AVM_USE_SINGLE_PRECISION)
