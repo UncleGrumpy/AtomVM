@@ -24,8 +24,9 @@ defmodule Exavmlib.MixProject do
   def project do
     [
       app: :exavmlib,
-      version: "0.1.0",
+      version: "0.2.0",
       elixir: "~> 1.6",
+      atomvm: [],
       deps: deps(),
       package: package()
     ]
@@ -37,6 +38,7 @@ defmodule Exavmlib.MixProject do
 
   defp deps do
     [
+      {:exatomvm, git: "https://github.com/UncleGrumpy/ExAtomVM/", branch: "build_exavmlib"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
@@ -46,8 +48,23 @@ defmodule Exavmlib.MixProject do
       files: [
         "mix.exs",
         "LICENSE",
+        "lib/AVMPort.ex",
+        "lib/Access.ex",
+        "lib/Bitwise.ex",
+        "lib/Code.ex",
+        "lib/Console.ex",
+        "lib/Enum.ex",
         "lib/GPIO.ex",
-        "lib/Console.ex"
+        "lib/I2C.ex",
+        "lib/Integer.ex",
+        "lib/Kernel.ex",
+        "lib/Keyword.ex",
+        "lib/LEDC.ex",
+        "lib/List.ex",
+        "lib/Map.ex",
+        "lib/Module.ex",
+        "lib/Process.ex",
+        "lib/Tuple.ex",
       ],
       description: "AtomVM Elixir library",
       licenses: ["Apache-2.0"],
