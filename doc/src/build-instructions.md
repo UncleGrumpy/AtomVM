@@ -113,6 +113,45 @@ You may build an Apple Xcode project, for developing, testing, and debugging in 
 
 The above commands will build and open an AtomVM project in the Xcode IDE.
 
+#### Cross Compiling for Milkv-Duo
+
+The simplest and recommended way of acquiring AtomVM for the 64-bit RISCV Milkv-Duo is to download a [release binary](https://github.com/atomvm/AtomVM/releases), or download a recent artifact from a [Milkv-Duo Build workflow run](https://github.com/atomvm/AtomVM/actions/workflows/milkv-build.yaml).
+
+In addition to the standard `generic_unix` requirements the [`duo-app-sdk`](https://github.com/milkv-duo/duo-app-sdk/releases/download/duo-app-sdk-v1.2.0/duo-sdk-v1.2.0.tar.gz) is required for cross compiling applications for the Milkv-Duo. The `duo-app-sdk` does not include headers for [`zlib`](https://github.com/madler/zlib), and the [official buildroot images](https://github.com/milkv-duo/duo-buildroot-sdk/releases) and `duo-app-sdk` do not include [`Mbed TLS`](https://github.com/Mbed-TLS/mbedtls), so sources for both of these libraries are required. The simplest method, and the one used to generate AtomVM Milkv-Duo binaries in our CI is to install static versions of these libraries into the `duo-app-sdk/rootfs`, and then build a statically linked AtomVM. If you wish to use dynamically linked `zlib` and `Mbed TLS` the matching versions of those libraries will also need to be installed into the buildroot image. The steps necessary to prepare the `duo-app-sdk` and build a statically linked AtomVM are as follows (this assumes you are working in your $HOME directory, make adjustments to suit your needs):
+
+    shell$ wget https://github.com/milkv-duo/duo-app-sdk/releases/download/duo-app-sdk-v1.2.0/duo-sdk-v1.2.0.tar.gz --output-document=$TMP/duo-sdk-v1.2.0.tar.gz
+    shell$ tar xf $TMP/duo-sdk-v1.2.0.tar.gz
+
+    shell$ export TOOLCHAIN_PREFIX=${HOME}/duo-sdk/riscv64-linux-musl-x86_64/bin/riscv64-unknown-linux-musl-
+    shell$ export CC=${TOOLCHAIN_PREFIX}gcc
+    shell$ export SYSROOT=${HOME}/duo-sdk/rootfs
+    shell$ export LDFLAGS="-mcpu=c906fdv -march=rv64imafdcv0p7xthead -mcmodel=medany -mabi=lp64d -L${SYSROOT}"
+    shell$ export CFLAGS="-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -I${SYSROOT}/usr/include"
+
+    shell$ git clone https://github.com/Mbed-TLS/mbedtls
+    shell$ cd mbedtls
+    shell$ mkdir build
+    shell$ cd build
+    shell$ cmake .. -DUSE_SHARED_MBEDTLS_LIBRARY=off -DENABLE_TESTING=off
+    shell$ DESTDIR=${SYSROOT} make install
+
+    shell$ cd ${HOME}
+    shell$ git clone https://github.com/madler/zlib
+    shell$ cd zlib
+    shell$ ./configure --static
+    shell$ make
+    shell$ DESTDIR=${SYSROOT} make install
+
+    shell$ cd ${HOME}
+    shell$ git clone https://github.com/atomvm/AtomVM
+    shell$ cd AtomVM
+    shell$ mkdir build
+    shell$ cd build
+    shell$ cmake -DCMAKE_TOOLCHAIN_FILE=${HOME}/AtomVM/CMakeModules/milkv-toolchain.cmake -DAVM_BUILD_RUNTIME_ONLY=on -DAVM_DISABLE_SMP=on ..
+    shell$ make
+
+The `-DCMAKE_INSTALL_PREFIX=` option can be set to the base in the mounted milkv-duo buildroot image that the files should be installed to. For example, on a linux system sd-cards are often mounted in `/run/media/$USER`, so if the user joe wants to install the `atomvm` executable to /usr/local/bin in the Milkv-Duo buildroot image, the appropriate `cmake` option would be: `-DCMAKE_INSTALL_PREFIX=/run/media/joe/rootfs/usr/local`. To 'install' the libraries and executable to the sd-card root permissions are required: `sudo make install` will install to the `CMAKE_INSTALL_PREFIX`.
+
 ### Running tests
 
 There are currently two sets of suites of tests for AtomVM:

@@ -1,0 +1,153 @@
+#
+#  Copyright 2022 Paul Guyot <pguyot@kallisys.net>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: Milkv-Duo Build
+on:
+  push:
+    paths-ignore:
+      - 'src/platforms/emscripten/**'
+      - 'src/platforms/esp32/**'
+      - 'src/platforms/rp2040/**'
+      - 'src/platforms/stm32/**'
+      - 'doc/**'
+      - 'LICENSES/**'
+      - '*.Md'
+      - '*.md'
+  pull_request:
+    paths-ignore:
+      - 'src/platforms/emscripten/**'
+      - 'src/platforms/esp32/**'
+      - 'src/platforms/rp2040/**'
+      - 'src/platforms/stm32/**'
+      - 'doc/**'
+      - 'LICENSES/**'
+      - '*.Md'
+      - '*.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  milkv-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/cache@v3
+      id: builddeps-cache
+      with:
+        path: |
+              /home/runner/duo-sdk
+              /home/runner/rebar3
+        key: ${{ runner.os }}-build-deps
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "26"
+
+    - name: "Build rebar3"
+      if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
+      working-directory: /home/runner
+      run: |
+        git clone https://github.com/erlang/rebar3.git
+        cd rebar3
+        ./bootstrap
+
+    - name: Install duo-app-sdk
+      if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
+      working-directory: /home/runner
+      run: |
+        set -euo pipefail
+        cd /home/runner
+        wget https://github.com/milkv-duo/duo-app-sdk/releases/download/duo-app-sdk-v1.2.0/duo-sdk-v1.2.0.tar.gz \
+        --output-document=$RUNNER_TEMP/duo-sdk-v1.2.0.tar.gz
+        tar xf ${RUNNER_TEMP}/duo-sdk-v1.2.0.tar.gz
+        pwd && ls
+
+    - name: "Add MbedTLS (static) support to duo-sdk"
+      if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
+      working-directory: /home/runner
+      run: |
+        set -euo pipefail
+        git clone https://github.com/Mbed-TLS/mbedtls
+        cd mbedtls
+        export TOOLCHAIN_PREFIX=/home/runner/duo-sdk/riscv64-linux-musl-x86_64/bin/riscv64-unknown-linux-musl-
+        export CC=${TOOLCHAIN_PREFIX}gcc
+        export SYSROOT=/home/runner/duo-sdk/rootfs
+        export LDFLAGS="-mcpu=c906fdv -march=rv64imafdcv0p7xthead -mcmodel=medany -mabi=lp64d -L${SYSROOT}"
+        export CFLAGS="-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -I${SYSROOT}/usr/include"
+
+        mkdir build
+        cd build
+        cmake .. -DUSE_SHARED_MBEDTLS_LIBRARY=off -DENABLE_TESTING=off
+        DESTDIR=${SYSROOT} make install
+
+    - name: "Add zlib (static) support to duo-sdk"
+      if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
+      working-directory: /home/runner
+      run: |
+        set -euo pipefail
+        git clone https://github.com/madler/zlib
+        cd zlib
+        export TOOLCHAIN_PREFIX=/home/runner/duo-sdk/riscv64-linux-musl-x86_64/bin/riscv64-unknown-linux-musl-
+        export CC=${TOOLCHAIN_PREFIX}gcc
+        export SYSROOT=/home/runner/duo-sdk/rootfs
+        export LDFLAGS="-mcpu=c906fdv -march=rv64imafdcv0p7xthead -mcmodel=medany -mabi=lp64d -L${SYSROOT}"
+        export CFLAGS="-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -I${SYSROOT}/usr/include"
+
+        ./configure --static
+        make
+        DESTDIR=${SYSROOT} make install
+
+    - name: "Install deps"
+      run: sudo apt install -y cmake gperf
+
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Build
+      shell: bash
+      working-directory: ./
+      run: |
+        set -euo pipefail
+        export PATH="$PATH:/home/runner/rebar3"
+        export TOOLCHAIN_PREFIX=/home/runner/duo-sdk/riscv64-linux-musl-x86_64/bin/riscv64-unknown-linux-musl-
+        export SYSROOT=/home/runner/duo-sdk/rootfs
+        export LDFLAGS="-mcpu=c906fdv -march=rv64imafdcv0p7xthead -mcmodel=medany -mabi=lp64d -L${SYSROOT} -static"
+        export CFLAGS="-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -I${SYSROOT}/usr/include"
+
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_TOOLCHAIN_FILE=CMakeModules/milkv-toolchain.cmake -DAVM_BUILD_RUNTIME_ONLY=on -DAVM_DISABLE_SMP=on
+        make -j
+
+    - name: Package
+      shell: bash
+      working-directory: ./build
+      run: |
+        export PATH="$PATH:/home/runner/rebar3"
+        mkdir AtomVM-milkv-duo
+        DESTDIR=AtomVM-milkv-duo make install
+        tar -czf AtomVM-milkv-duo-${{ github.ref_name }}.tar.gz AtomVM-milkv-duo
+        sha256sum AtomVM-milkv-duo-${{ github.ref_name }}.tar.gz > AtomVM-milkv-duo-${{ github.ref_name }}.tar.gz.sha256
+
+    - name: "Upload Milkv-Duo artifacts"
+      uses: actions/upload-artifact@v3
+      with:
+        name: AtomVM-milkv-duo
+        path: |
+          ./build/AtomVM-milkv-duo-${{ github.ref_name }}.tar.gz
+          ./build/AtomVM-milkv-duo-${{ github.ref_name }}.tar.gz.sha256
+        if-no-files-found: error
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        draft: true
+        fail_on_unmatched_files: true
+        files: |
+          build/AtomVM-milkv-duo-${{ github.ref_name }}.tar.gz
+          build/AtomVM-milkv-duo-${{ github.ref_name }}.tar.gz.sha256

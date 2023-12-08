@@ -47,7 +47,10 @@ if(NOT AVM_BUILD_RUNTIME_ONLY)
     add_subdirectory(tests)
 endif()
 
-add_subdirectory(tools/packbeam)
+if (NOT CMAKE_CROSSCOMPILING)
+    add_subdirectory(tools/packbeam)
+endif()
+
 add_subdirectory(tools/uf2tool)
 
 if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
