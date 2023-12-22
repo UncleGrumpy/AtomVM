@@ -9,20 +9,16 @@ name: Run tests with BEAM
 on:
   push:
     paths-ignore:
-      - 'src/platforms/emscripten/**'
-      - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
-      - 'src/platforms/stm32/**'
+      - '!src/platforms/generic_unix/**'
+      - 'src/platforms/**'
       - 'doc/**'
       - 'LICENSES/**'
       - '*.Md'
       - '*.md'
   pull_request:
     paths-ignore:
-      - 'src/platforms/emscripten/**'
-      - 'src/platforms/esp32/**'
-      - 'src/platforms/rp2040/**'
-      - 'src/platforms/stm32/**'
+      - '!src/platforms/generic_unix/**'
+      - 'src/platforms/**'
       - 'doc/**'
       - 'LICENSES/**'
       - '*.Md'
