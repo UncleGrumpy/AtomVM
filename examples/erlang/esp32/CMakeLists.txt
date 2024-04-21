@@ -37,3 +37,5 @@ pack_runnable(sx127x sx127x eavmlib estdlib)
 pack_runnable(reformat_nvs reformat_nvs eavmlib)
 pack_runnable(uartecho uartecho eavmlib estdlib)
 pack_runnable(ledc_example ledc_example eavmlib estdlib)
+pack_runnable(wifi_scan wifi_scan estdlib eavmlib)
+
