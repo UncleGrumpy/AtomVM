@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `code:all_loaded/0` and `code:all_available/0`
 - Added menuconfig option for enabling USE_USB_SERIAL, eg. serial over USB for certain ESP32-S2 boards etc.
 - Add `network:connect/0,1` and `network:disconnect` to ESP32 network driver.
+- Add `network:wifi_scan/0,1` to ESP32 network driver to scan available APs when in station (or sta+ap) mode.
 
 ### Changed
 
