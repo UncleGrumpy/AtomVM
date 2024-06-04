@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Implement `gpio:init/1` on esp32 to initialize pins for GPIO usage, which some pins
 require depending on default function and bootloader code
+- Add `network:connect/0,1` and `network:disconnect` to ESP32 network driver.
 
 ## [0.6.3] - 20-07-2024
 
@@ -48,6 +49,11 @@ See issue [#1193](https://github.com/atomvm/AtomVM/issues/1193).
 - Fix a bug that could yield crashes when functions are sent in messages
 - Fix bug where failing guards would corrupt x0 and x1
 - Fix a memory leak when raising out of memory error while executing PUT_MAP_ASSOC instruction
+
+### Changed
+
+- Using a custom callback for STA disconnected events in esp32 network driver will stop automatic re-connect,
+allowing applications to use scan results or other means to decide when and where to connect.
 
 ## [0.6.2] - 25-05-2024
 
