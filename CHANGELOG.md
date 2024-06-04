@@ -12,9 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added menuconfig option for enabling USE_USB_SERIAL, eg. serial over USB for certain ESP32-S2 boards etc.
 - Partial support for `erlang:fun_info/2`
 - Added support for `registered_name` in `erlang:process_info/2` and `Process.info/2`
+- Added `network:connect/0,1` and `network:disconnect` to ESP32 network driver.
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
+
+### Changed
+
+- Using a custom callback for STA disconnected events in esp32 network driver will stop automatic re-connect,
+allowing applications to use scan results or other means to decide when and where to connect.
 
 ## [0.6.6] - Unreleased
 
