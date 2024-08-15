@@ -77,6 +77,17 @@ jobs:
           python3 -m pip install breathe
           python3 -m pip install pygments
 
+      - name: Set docs target name
+        shell: bash
+        run: |
+            if [[ -n "${{ github.base_ref }}" -a "${{github.ref_name}}" != *"/merge" ]]; then
+              echo "AVM_DOCS_NAME=${{ github.base_ref }}" >> "$GITHUB_ENV";
+            elif [[ "${{github.ref_name}}"" == *"/merge" ]]; then
+              echo "AVM_DOCS_NAME=$((git branch --show-current))" >> "$GITHUB_ENV";
+            else
+              echo "AVM_DOCS_NAME=${GITHUB_REF_NAME}" >> "$GITHUB_ENV";
+            fi
+
       - uses: actions/checkout@v4
         with:
           repository: ${{ vars.GITHUB_REPOSITORY }}
