@@ -53,6 +53,9 @@
 
 #define TAG "gpio_driver"
 
+#define HIGH_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "high"))
+#define LOW_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "low"))
+
 #ifdef CONFIG_AVM_ENABLE_GPIO_NIFS
 static const struct Nif *gpio_nif_get_nif(const char *nifname);
 #endif
@@ -86,6 +89,16 @@ static const AtomStringIntPair pull_mode_table[] = {
     { ATOM_STR("\x7", "up_down"), GPIO_PULLUP_PULLDOWN },
     { ATOM_STR("\x8", "floating"), GPIO_FLOATING },
     SELECT_INT_DEFAULT(-1)
+};
+
+static const AtomStringIntPair interrupt_type_table[] = {
+    { ATOM_STR("\x6", "rising"),  GPIO_INTR_POSEDGE},
+    { ATOM_STR("\x7", "falling"), GPIO_INTR_NEGEDGE },
+    { ATOM_STR("\x4", "both"),  GPIO_INTR_ANYEDGE},
+    { ATOM_STR("\x3", "low"),  GPIO_INTR_LOW_LEVEL},
+    { ATOM_STR("\x4", "high"),  GPIO_INTR_HIGH_LEVEL},
+    { ATOM_STR("\x4", "none"),  GPIO_INTR_DISABLE},
+    SELECT_INT_DEFAULT(GPIO_INTR_MAX)
 };
 
 enum gpio_pin_level
@@ -139,7 +152,22 @@ struct GPIOData
     struct ListHead gpio_listeners;
 };
 
-/* TODO: Change error returns to {error, Reason} (See: https://github.com/atomvm/AtomVM/issues/894) */
+static term create_pair(Context *ctx, term term1, term term2)
+{
+    term ret = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(ret, 0, term1);
+    term_put_tuple_element(ret, 1, term2);
+
+    return ret;
+}
+
+static term error_return_tuple(Context *ctx, term term)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return create_pair(ctx, ERROR_ATOM, term);
+}
 
 static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode_term)
 {
@@ -147,21 +175,22 @@ static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     avm_int_t mode = interop_atom_term_select_int(pin_mode_table, mode_term, ctx->global);
     if (UNLIKELY(mode < 0)) {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
     esp_err_t result = gpio_set_direction(gpio_num, (gpio_mode_t) mode);
 
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        term reason = globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "mode_fail"));
+        return error_return_tuple(ctx, reason);
     }
 
     return OK_ATOM;
@@ -178,61 +207,64 @@ static inline term set_pin_pull_mode(Context *ctx, term gpio_num_term, term pull
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     avm_int_t pull_mode = get_pull_mode(ctx, pull);
     if (UNLIKELY(pull_mode < 0)) {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     esp_err_t result = gpio_set_pull_mode(gpio_num, (gpio_pull_mode_t) pull_mode);
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        term reason = globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "pull_fail"));
+        return error_return_tuple(ctx, reason);
     }
     return OK_ATOM;
 }
 
-static inline term hold_en(term gpio_num_term)
+static inline term hold_en(Context *ctx, term gpio_num_term)
 {
     gpio_num_t gpio_num;
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     esp_err_t result = gpio_hold_en(gpio_num);
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        term reason = globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "hold_fail"));
+        return error_return_tuple(ctx, reason);
     }
     return OK_ATOM;
 }
 
-static inline term hold_dis(term gpio_num_term)
+static inline term hold_dis(Context *ctx, term gpio_num_term)
 {
     gpio_num_t gpio_num;
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     esp_err_t result = gpio_hold_dis(gpio_num);
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        term reason = globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "hold_fail"));
+        return error_return_tuple(ctx, reason);
     }
     return OK_ATOM;
 }
@@ -243,45 +275,46 @@ static inline term gpio_digital_write(Context *ctx, term gpio_num_term, term lev
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     int level;
     if (term_is_integer(level_term)) {
         level = term_to_int32(level_term);
         if (UNLIKELY((level != 0) && (level != 1))) {
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
     } else {
         level = interop_atom_term_select_int(pin_level_table, level_term, ctx->global);
         if (UNLIKELY(level < 0)) {
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
     }
 
     esp_err_t result = gpio_set_level(gpio_num, level);
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        term reason = globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "set_fail"));
+        return error_return_tuple(ctx, reason);
     }
 
     return OK_ATOM;
 }
 
-static inline term gpio_digital_read(term gpio_num_term)
+static inline term gpio_digital_read(Context *ctx, term gpio_num_term)
 {
     gpio_num_t gpio_num;
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     avm_int_t level = gpio_get_level(gpio_num);
@@ -329,7 +362,7 @@ static term gpiodriver_close(Context *ctx)
     GlobalContext *glb = ctx->global;
     int gpio_atom_index = atom_table_ensure_atom(glb->atom_table, gpio_atom, AtomTableNoOpts);
     if (UNLIKELY(!globalcontext_get_registered_process(glb, gpio_atom_index))) {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     struct GPIOData *gpio_data = ctx->platform_data;
@@ -370,8 +403,9 @@ EventListener *gpio_interrupt_callback(GlobalContext *glb, EventListener *listen
     // 1 header + 2 elements
     BEGIN_WITH_STACK_HEAP(1 + 2, heap);
 
+    term interrupt_atom = globalcontext_make_atom(glb, ATOM_STR("\xE", "gpio_interrupt"));
     term int_msg = term_alloc_tuple(2, &heap);
-    term_put_tuple_element(int_msg, 0, GPIO_INTERRUPT_ATOM);
+    term_put_tuple_element(int_msg, 0, interrupt_atom);
     term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
 
     globalcontext_send_message(glb, listening_pid, int_msg);
@@ -397,10 +431,10 @@ static term gpiodriver_set_direction(Context *ctx, term cmd)
     return gpio_set_pin_mode(ctx, gpio_num, direction);
 }
 
-static term gpiodriver_read(term cmd)
+static term gpiodriver_read(Context *ctx, term cmd)
 {
     term gpio_num = term_get_tuple_element(cmd, 1);
-    return gpio_digital_read(gpio_num);
+    return gpio_digital_read(ctx, gpio_num);
 }
 
 static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, int gpio_num)
@@ -427,11 +461,11 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     term trigger = term_get_tuple_element(cmd, 2);
@@ -439,7 +473,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         term pid = term_get_tuple_element(cmd, 3);
         if (UNLIKELY(!term_is_pid(pid) && !term_is_atom(pid))) {
             ESP_LOGE(TAG, "Invalid listener parameter, must be a pid() or registered process!");
-            return ERROR_ATOM;
+            return error_return_tuple(ctx, BADARG_ATOM);
         }
         if (term_is_pid(pid)) {
             target_local_pid = term_to_local_process_id(pid);
@@ -448,7 +482,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
             int32_t registered_process = (int32_t) globalcontext_get_registered_process(ctx->global, pid_atom_index);
             if (UNLIKELY(registered_process == 0)) {
                 ESP_LOGE(TAG, "Invalid listener parameter, atom() is not a registered process name!");
-                return ERROR_ATOM;
+                return error_return_tuple(ctx, BADARG_ATOM);
             }
             target_local_pid = registered_process;
         }
@@ -457,38 +491,13 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     }
 
     if (gpiodriver_is_gpio_attached(gpio_data, gpio_num)) {
-        return ERROR_ATOM;
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     /* TODO: GPIO specific atoms should be removed from platform_defaultatoms and constructed within this driver */
-    gpio_int_type_t interrupt_type;
-    switch (trigger) {
-        case NONE_ATOM:
-            interrupt_type = GPIO_INTR_DISABLE;
-            break;
-
-        case RISING_ATOM:
-            interrupt_type = GPIO_INTR_POSEDGE;
-            break;
-
-        case FALLING_ATOM:
-            interrupt_type = GPIO_INTR_NEGEDGE;
-            break;
-
-        case BOTH_ATOM:
-            interrupt_type = GPIO_INTR_ANYEDGE;
-            break;
-
-        case LOW_ATOM:
-            interrupt_type = GPIO_INTR_LOW_LEVEL;
-            break;
-
-        case HIGH_ATOM:
-            interrupt_type = GPIO_INTR_HIGH_LEVEL;
-            break;
-
-        default:
-            return ERROR_ATOM;
+    gpio_int_type_t interrupt_type = interop_atom_term_select_int(interrupt_type_table, trigger, ctx->global);
+    if (UNLIKELY(interrupt_type == GPIO_INTR_MAX)) {
+        return error_return_tuple(ctx, BADARG_ATOM);
     }
 
     TRACE("going to install interrupt for %i.\n", gpio_num);
@@ -560,15 +569,6 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
     return ERROR_ATOM;
 }
 
-static term create_pair(Context *ctx, term term1, term term2)
-{
-    term ret = term_alloc_tuple(2, &ctx->heap);
-    term_put_tuple_element(ret, 0, term1);
-    term_put_tuple_element(ret, 1, term2);
-
-    return ret;
-}
-
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 {
     Message *message = mailbox_first(&ctx->mailbox);
@@ -596,7 +596,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
             break;
 
         case GPIOReadCmd:
-            ret = gpiodriver_read(gen_message.req);
+            ret = gpiodriver_read(ctx, gen_message.req);
             break;
 
         case GPIOSetIntCmd:
@@ -693,18 +693,26 @@ static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
 
 static term nif_gpio_hold_en(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
     UNUSED(argc);
 
-    return hold_en(argv[0]);
+    term result = hold_en(ctx, argv[0]);
+    if (UNLIKELY(result == BADARG_ATOM)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
 }
 
 static term nif_gpio_hold_dis(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
     UNUSED(argc);
 
-    return hold_dis(argv[0]);
+    term result = hold_dis(ctx, argv[0]);
+    if (UNLIKELY(result == BADARG_ATOM)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
 }
 
 #if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
@@ -731,12 +739,22 @@ static term nif_gpio_deep_sleep_hold_dis(Context *ctx, int argc, term argv[])
 
 static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
 {
-    return gpio_digital_write(ctx, argv[0], argv[1]);
+    term result = gpio_digital_write(ctx, argv[0], argv[1]);
+    if (UNLIKELY(result == BADARG_ATOM)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
 }
 
 static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
 {
-    return gpio_digital_read(argv[0]);
+    term result =  gpio_digital_read(ctx, argv[0]);
+    if (UNLIKELY(result == BADARG_ATOM)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
 }
 
 static const struct Nif gpio_init_nif =
