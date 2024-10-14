@@ -96,7 +96,7 @@ jobs:
         with:
           repository: atomvm/atomvm_www
           ref: Production
-          path: /home/runner/work/AtomVM/AtomVM/www
+          path: /__w/AtomVM/AtomVM/www
 
       - name: Track all branches
         shell: bash
@@ -119,7 +119,7 @@ jobs:
       - name: Commit files
         id: commit_files
         if: github.repository == 'atomvm/AtomVM'
-        working-directory: /home/runner/work/AtomVM/AtomVM/www
+        working-directory: /__w/AtomVM/AtomVM/www
         run: |
           git config --local user.email "atomvm-doc-bot@users.noreply.github.com"
           git config --local user.name "AtomVM Doc Bot"
@@ -130,7 +130,7 @@ jobs:
           git log -1
       - name: Push changes
         if: github.repository == 'atomvm/AtomVM'
-        working-directory: /home/runner/work/AtomVM/AtomVM/www
+        working-directory: /__w/AtomVM/AtomVM/www
         run: |
           export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no"
           eval `ssh-agent -t 60 -s`
