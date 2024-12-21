@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `code:all_loaded/0` and `code:all_available/0`
 - Added menuconfig option for enabling USE_USB_SERIAL, eg. serial over USB for certain ESP32-S2 boards etc.
 
+### Fixed
+- ESP32 GPIO driver now matches spec for error returns, nifs raise `Error`, port functions return `{error, Reason}`
+
 ## [0.6.6] - Unreleased
 
 ### Added
