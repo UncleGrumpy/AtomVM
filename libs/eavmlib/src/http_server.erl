@@ -77,10 +77,11 @@ reply(StatusCode, ReplyBody, Conn) ->
         StatusCode, ReplyBody, [<<"Content-Type: text/html\r\nConnection: close\r\n">>], Conn
     ),
     Socket = proplists:get_value(socket, NewConn),
-    gen_tcp:close(Socket),
     ClosedConn =
         case proplists:get_value(closed, NewConn) of
-            undefined -> [{closed, true} | NewConn];
+            undefined ->
+                gen_tcp:close(Socket),
+                [{closed, true} | NewConn];
             true -> NewConn
         end,
     {ok, ClosedConn}.
