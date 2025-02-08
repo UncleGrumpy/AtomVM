@@ -63,6 +63,13 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v4
 
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v3
+      with:
+        languages: 'cpp'
+        mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
+
     - name: Build
       shell: bash
       working-directory: ./src/platforms/stm32/
@@ -73,3 +80,6 @@ jobs:
         # -DAVM_WARNINGS_ARE_ERRORS=ON
         cmake .. -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=/home/runner/libopencm3
         make -j
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v3

@@ -30,15 +30,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
   compile_tests:
+
     runs-on: ubuntu-24.04
     container: erlang:27
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["cpp", "javascript"]
+        include:
+        - language: "cpp"
+          query: "+./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql"
+        - language: "javascript"
+          query: ""
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
 
     - name: Install required packages
       run: apt update && apt install -y gperf zlib1g-dev cmake ninja-build
+
+    - name: "Git config safe.directory for codeql"
+      run: git config --global --add safe.directory /__w/AtomVM/AtomVM
+
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{matrix.language}}
+        mode: manual
+        queries: ${{matrix.query}}
 
     - name: Compile AtomVM and test modules
       run: |
@@ -48,6 +71,9 @@ jobs:
         cmake .. -G Ninja -DAVM_WARNINGS_ARE_ERRORS=ON
         # test_eavmlib does not work with wasm due to http + ssl test
         ninja AtomVM atomvmlib test_alisp hello_world run_script call_cast html5_events wasm_webserver
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v3
 
     - name: Upload AtomVM and test modules
       uses: actions/upload-artifact@v4

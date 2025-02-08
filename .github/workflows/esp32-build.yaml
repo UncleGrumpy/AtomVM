@@ -37,6 +37,7 @@ jobs:
 
       matrix:
         esp-idf-target: ["esp32", "esp32c3"]
+        language: ['cpp']
         idf-version:
          - 'v5.0.7'
          - 'v5.1.5'
@@ -53,6 +54,13 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v4
 
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{matrix.language}}
+        mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
+
     - name: Build with idf.py
       shell: bash
       working-directory: ./src/platforms/esp32/
@@ -68,6 +76,9 @@ jobs:
       run: |
         . $IDF_PATH/export.sh
         idf.py size-components
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v3
 
     - name: Install dependencies to build host AtomVM and run qemu
       run: |

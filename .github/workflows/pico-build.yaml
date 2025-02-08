@@ -37,6 +37,7 @@ jobs:
     strategy:
       matrix:
         board: ["pico", "pico_w"]
+        language: ["cpp"]
 
     steps:
     - name: Checkout repo
@@ -48,6 +49,13 @@ jobs:
     - name: "Install deps"
       run: sudo apt install -y cmake gperf ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib erlang-base erlang-dialyzer
 
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{matrix.language}}
+        mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
+
     - name: Build
       shell: bash
       working-directory: ./src/platforms/rp2040/
@@ -57,6 +65,9 @@ jobs:
         cd build
         cmake .. -G Ninja -DPICO_BOARD=${{ matrix.board }}
         ninja
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v3
 
     - name: Install nvm and nodejs 20
       run: |
