@@ -49,6 +49,9 @@ endif()
 # On Esp32, select is run in a loop in a dedicated task
 set(AVM_SELECT_IN_TASK ON)
 
+# Set project version before project so 'git describe' is not used by esp-idf
+include(GetVersion)
+set(PROJECT_VER ${ATOMVM_VERSION})
 project(atomvm-esp32)
 
 # esp-idf does not use compile_feature but instead sets version in

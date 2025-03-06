@@ -251,24 +251,7 @@ gperf_generate(${CMAKE_CURRENT_SOURCE_DIR}/nifs.gperf nifs_hash.h)
 add_custom_target(generated DEPENDS bifs_hash.h)
 add_custom_target(generated-nifs-hash DEPENDS nifs_hash.h)
 
-include(../../version.cmake)
-
-if (ATOMVM_DEV)
-    set(ATOMVM_GIT_REVISION "<unknown>")
-    execute_process(
-        COMMAND git rev-parse --short HEAD
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE ATOMVM_GIT_REVISION
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if (NOT ATOMVM_GIT_REVISION STREQUAL "")
-        set(ATOMVM_VERSION "${ATOMVM_BASE_VERSION}+git.${ATOMVM_GIT_REVISION}")
-    else()
-        set(ATOMVM_VERSION ${ATOMVM_BASE_VERSION})
-    endif()
-else()
-    set(ATOMVM_VERSION ${ATOMVM_BASE_VERSION})
-endif()
+include(GetVersion)
 
 # Add include to directory where avm_version.h is generated so targets linking
 # libAtomVM can access it
