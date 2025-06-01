@@ -80,6 +80,15 @@ get_dev_config(Device) ->
                 _ ->
                     Config
             end;
+        "stm32h7" ->
+            Config = get_h7dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
         _ ->
             io:format("Error! Unsupported device ~s.~n", [Device]),
             erlang:halt(255)
@@ -356,6 +365,98 @@ get_f7dev_config(Lookup) ->
             case Flash of
                 "i" ->
                     ?STM32F7_67_89_I;
+                _ ->
+                    unsupported
+            end;
+        _ ->
+            unsupported
+    end.
+
+get_h7dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "23" ->
+            case Flash of
+                "e" ->
+                    ?STM32H7_23_35_E;
+                "g" ->
+                    ?STM32H7_23_35_G;
+                _ ->
+                    unsupported
+            end;
+        "25" ->
+            case Flash of
+                "e" ->
+                    ?STM32H7_23_35_E;
+                "g" ->
+                    ?STM32H7_23_35_G;
+                _ ->
+                    unsupported
+            end;
+        "33" ->
+            case Flash of
+                "e" ->
+                    ?STM32H7_23_35_E;
+                "g" ->
+                    ?STM32H7_23_35_G;
+                _ ->
+                    unsupported
+            end;
+        "35" ->
+            case Flash of
+                "e" ->
+                    ?STM32H7_23_35_E;
+                "g" ->
+                    ?STM32H7_23_35_G;
+                _ ->
+                    unsupported
+            end;
+        "43" ->
+            case Flash of
+                "g" ->
+                    ?STM32H74_357_G;
+                "i" ->
+                    ?STM32H7_45_357_I;
+                _ ->
+                    unsupported
+            end;
+        "45" ->
+            case Flash of
+                "g" ->
+                    ?STM32H74_357_G;
+                "i" ->
+                    ?STM32H7_45_357_I;
+                _ ->
+                    unsupported
+            end;
+        "47" ->
+            case Flash of
+                "g" ->
+                    ?STM32H74_357_G;
+                "i" ->
+                    ?STM32H7_45_357_I;
+                _ ->
+                    unsupported
+            end;
+        "53" ->
+            case Flash of
+                "i" ->
+                    ?STM32H7_45_357_I;
+                _ ->
+                    unsupported
+            end;
+        "55" ->
+            case Flash of
+                "i" ->
+                    ?STM32H7_45_357_I;
+                _ ->
+                    unsupported
+            end;
+        "57" ->
+            case Flash of
+                "i" ->
+                    ?STM32H7_45_357_I;
                 _ ->
                     unsupported
             end;

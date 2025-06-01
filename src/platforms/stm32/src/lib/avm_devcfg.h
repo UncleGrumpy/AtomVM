@@ -24,7 +24,7 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
 
-#if (defined(STM32F4) || defined(STM32F7))
+#if (defined(STM32F4) || defined(STM32F7) || defined(STM32H7))
 #define FLASH_START_ADDRESS (0x08000000U)
 #endif
 
@@ -62,6 +62,12 @@
 #elif defined(MHZ_216)
 #define AVM_CLOCK_HZ (216000000U)
 #define AVM_CLOCK_CONFIGURATION (&rcc_hse_8mhz_3v3[(RCC_CLOCK_3V3_216MHZ)])
+#elif defined(MHZ_480)
+#define AVM_CLOCK_HZ (480000000U)
+#define AVM_CLOCK_CONFIGURATION (&rcc_hse_8mhz_3v3[(RCC_CLOCK_3V3_480MHZ)])
+#elif defined(MHZ_550)
+#define AVM_CLOCK_HZ (550000000U)
+#define AVM_CLOCK_CONFIGURATION (&rcc_hse_8mhz_3v3[(RCC_CLOCK_3V3_550MHZ)])
 #endif
 
 #if defined(CONSOLE_1)

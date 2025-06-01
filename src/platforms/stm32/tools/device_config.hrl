@@ -79,3 +79,11 @@
 -define(STM32F7_67_89_I, #{
     rom => "ROM_2048K", ram => "RAM_384K", ccm => "CCM_128K", clock => "MHZ_216"
 }).
+
+%% STM32H7 Family configurations
+-define(STM32H7_23_35_E, #{rom => "ROM_512K", ram => "RAM_128K", ccm => "CCM_128K", clock => "MHZ_550"}).
+-define(STM32H7_23_35_G, #{rom => "ROM_1024K", ram => "RAM_128K", ccm => "CCM_128K", clock => "MHZ_550"}).
+-define(STM32H742G, #{rom => "ROM_512K", ram =>"RAM_384K", ccm => "CCM_128K", clock => "MHZ_480"}).
+-define(STM32H742I, #{rom => "ROM_1024K", ram =>"RAM_384K", ccm => "CCM_128K", clock => "MHZ_480"}).
+-define(STM32H74_357_G, #{rom => "ROM_512K", ram =>"RAM_512K", ccm => "CCM_128K", clock => "MHZ_480"}).
+-define(STM32H7_45_357_I, #{rom => "ROM_1024K", ram =>"RAM_512K", ccm => "CCM_128K", clock => "MHZ_480"}).
