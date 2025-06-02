@@ -64,10 +64,18 @@
 #define AVM_CLOCK_CONFIGURATION (&rcc_hse_8mhz_3v3[(RCC_CLOCK_3V3_216MHZ)])
 #elif defined(MHZ_480)
 #define AVM_CLOCK_HZ (480000000U)
+#if defined(STM32H7)
+#define AVM_CLOCK_CONFIGURATION RCC_CPUCLK
+#else
 #define AVM_CLOCK_CONFIGURATION (&rcc_hse_8mhz_3v3[(RCC_CLOCK_3V3_480MHZ)])
+#endif
 #elif defined(MHZ_550)
 #define AVM_CLOCK_HZ (550000000U)
+#if defined(STM32H7)
+#define AVM_CLOCK_CONFIGURATION RCC_CPUCLK
+#else
 #define AVM_CLOCK_CONFIGURATION (&rcc_hse_8mhz_3v3[(RCC_CLOCK_3V3_550MHZ)])
+#endif
 #endif
 
 #if defined(CONSOLE_1)
