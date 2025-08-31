@@ -812,6 +812,8 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     SMP_MUTEX_UNLOCK(platform->random_mutex);
 }
 
+#endif
+
 #ifndef AVM_NO_JIT
 ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
 {
@@ -831,6 +833,4 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t si
     return (ModuleNativeEntryPoint) (native_code + offset);
 #endif
 }
-#endif
-
 #endif
