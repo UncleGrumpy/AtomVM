@@ -51,10 +51,7 @@ test_echo_server(SpawnControllingProcess) ->
     end,
 
     test_send_receive(Port, 10, SpawnControllingProcess),
-
-    %% TODO bug closing listening socket
-    % gen_tcp:close(ListenSocket),
-
+    gen_tcp:close(ListenSocket),
     ok.
 
 accept(Pid, ListenSocket, SpawnControllingProcess) ->
