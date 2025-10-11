@@ -84,11 +84,11 @@ jobs:
         echo "**hw.ncpu:**"
         sysctl -n hw.ncpu
 
-    - name: Disable eavmlib's test_http_server
-      shell: freebsd {0}
-      run: |
-        cd $GITHUB_WORKSPACE;
-        sed -i '' 's/test_http_server/%test_http_server/g' tests/libs/eavmlib/tests.erl
+#    - name: Disable eavmlib's test_http_server
+#      shell: freebsd {0}
+#      run: |
+#        cd $GITHUB_WORKSPACE;
+#        sed -i '' 's/test_http_server/%test_http_server/g' tests/libs/eavmlib/tests.erl
 
     - name: "Build: create build dir"
       shell: freebsd {0}
