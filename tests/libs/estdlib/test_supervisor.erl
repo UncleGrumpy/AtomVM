@@ -22,13 +22,16 @@
 
 -export([test/0, init/1, start_link/1]).
 
+-include("etest.hrl").
+
 test() ->
     ok = test_basic_supervisor(),
     ok = test_supervisor_order(),
+    ok = test_one_for_all(),
     ok.
 
 test_basic_supervisor() ->
-    {ok, _SupPid} = start_link(self()),
+    {ok, SupPid} = start_link(self()),
     Pid1 = get_and_test_server(),
     gen_server:cast(Pid1, {crash, test}),
     Pid2 = get_and_test_server(),
@@ -43,8 +46,12 @@ test_basic_supervisor() ->
         receive
             {ping_pong_server_ready, Pid3} ->
                 Pid3
-        after 100 -> no_restart
+        after 100 ->
+            no_restart
         end,
+    %% Stopping the supervisor at the conclusion of each test prevents confusing
+    %% and unnecessary crashes and stacktraces when test/0 exits successfully.
+    gen_server:stop(SupPid, normal, 60_000),
     ok.
 
 get_and_test_server() ->
@@ -52,7 +59,8 @@ get_and_test_server() ->
         receive
             {ping_pong_server_ready, ReadyServer} ->
                 ReadyServer
-        after 2000 -> throw(timeout)
+        after 2000 ->
+            throw({timeout, {start, ping_pong_server}})
         end,
     pong = gen_server:call(Pid, ping),
     Pid.
@@ -61,27 +69,36 @@ start_link(Parent) ->
     supervisor:start_link({local, testsup}, ?MODULE, {test_basic_supervisor, Parent}).
 
 init({test_basic_supervisor, Parent}) ->
-    ChildSpecs = [
-        {test_child, {ping_pong_server, start_link, [Parent]}, transient, brutal_kill, worker, [
-            ping_pong_server
-        ]}
-    ],
+    ChildSpecs =
+        [
+            {test_child, {ping_pong_server, start_link, [Parent]}, transient, brutal_kill, worker, [
+                ping_pong_server
+            ]}
+        ],
     {ok, {{one_for_one, 10000, 3600}, ChildSpecs}};
 init({test_supervisor_order, Parent}) ->
-    ChildSpecs = [
-        {ready_1, {notify_init_server, start_link, [{Parent, ready_1}]}, transient, brutal_kill,
-            worker, [
-                notify_init_server
-            ]},
-        {ready_2, {notify_init_server, start_link, [{Parent, ready_2}]}, transient, brutal_kill,
-            worker, [
-                notify_init_server
-            ]}
-    ],
-    {ok, {{one_for_one, 10000, 3600}, ChildSpecs}}.
+    ChildSpecs =
+        [
+            {ready_1, {notify_init_server, start_link, [{Parent, ready_1}]}, transient, brutal_kill,
+                worker, [notify_init_server]},
+            {ready_2, {notify_init_server, start_link, [{Parent, ready_2}]}, transient, brutal_kill,
+                worker, [notify_init_server]}
+        ],
+    {ok, {{one_for_one, 10000, 3600}, ChildSpecs}};
+init({test_one_for_all, Parent}) ->
+    ChildSpecs =
+        [
+            {ping_pong_server_1, {ping_pong_server, start_link, [Parent]}, permanent, brutal_kill,
+                worker, [ping_pong_server]},
+            {ping_pong_server_2, {ping_pong_server, start_link, [Parent]}, transient, brutal_kill,
+                worker, [ping_pong_server]},
+            {ready_1, {notify_init_server, start_link, [{Parent, ready_1}]}, temporary, brutal_kill,
+                worker, [notify_init_server]}
+        ],
+    {ok, {{one_for_all, 10000, 3600}, ChildSpecs}}.
 
 test_supervisor_order() ->
-    supervisor:start_link(?MODULE, {test_supervisor_order, self()}),
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_supervisor_order, self()}),
     ready_1 =
         receive
             Msg1 ->
@@ -96,4 +113,67 @@ test_supervisor_order() ->
         after 1000 ->
             {error, {timeout, ready_2}}
         end,
+    gen_server:stop(SupPid, normal, 60_000),
+    ok.
+
+test_one_for_all() ->
+    {ok, SupPid} = supervisor:start_link({local, oneforall}, ?MODULE, {test_one_for_all, self()}),
+    Server_1 =
+        receive
+            {ping_pong_server_ready, ReadyServer1} ->
+                ReadyServer1
+        after 1000 ->
+            error({timeout, {start, ping_pong_server_1}})
+        end,
+    Server_2 =
+        receive
+            {ping_pong_server_ready, ReadyServer2} ->
+                ReadyServer2
+        after 1000 ->
+            error({timeout, {start, ping_pong_server_2}})
+        end,
+    ready_1 =
+        receive
+            Msg1 ->
+                Msg1
+        after 1000 ->
+            {error, {timeout, ready_1}}
+        end,
+    MonitorRef = monitor(process, Server_2),
+    ok = gen_server:call(Server_1, {stop, test_crash}),
+    receive
+        {'DOWN', MonitorRef, process, Server_2, killed} ->
+            ok;
+        Error ->
+            error(Error)
+    after 1000 ->
+        error({timeout, {stop, ping_pong_server_2}})
+    end,
+    Restart_1 =
+        receive
+            {ping_pong_server_ready, RestartServer1} ->
+                RestartServer1
+        after 1000 ->
+            error({timeout, {restart, ping_pong_server_1}})
+        end,
+    Restart_2 =
+        receive
+            {ping_pong_server_ready, RestartServer2} ->
+                RestartServer2
+        after 1000 ->
+            error({timeout, {restart, ping_pong_server_2}})
+        end,
+    Restart_3 =
+        receive
+            ready_1 ->
+                error({error, restarted_temporary})
+        after 1000 ->
+            no_start
+        end,
+    ?ASSERT_EXCEPTION(gen_server:call(Server_1, ping)),
+    ?ASSERT_EXCEPTION(gen_server:call(Server_2, ping)),
+    ?ASSERT_MATCH(is_pid(Restart_1), true),
+    ?ASSERT_MATCH(is_pid(Restart_2), true),
+    ?ASSERT_MATCH(Restart_3, no_start),
+    gen_server:stop(SupPid, normal, 60_000),
     ok.
