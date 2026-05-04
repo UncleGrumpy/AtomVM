@@ -427,13 +427,13 @@ assert_all_native_free(State) ->
 %% add pc, pc, r3
 %% nop()
 %% offset_to_label0
-%% ```
+%% '''
 %%
 %% On ARMv7-M/ARMv8-M (Thumb-2 variant), each jump table entry is 6 bytes:
 %% ```
 %% push {r1, r4, r5, r6, r7, lr}
 %% b.w offset_to_label0
-%% ```
+%% '''
 %%
 %% @end
 %% @param State current backend state
@@ -855,7 +855,7 @@ return_if_not_equal_to_ctx(
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a jump to a label. The offset of the relocation is saved and will
-%% be updated with `update_branches/2`.
+%% be updated with `update_branches/2'.
 %% @end
 %% @param State current backend state
 %% @param Label to jump to

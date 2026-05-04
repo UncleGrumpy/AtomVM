@@ -30,7 +30,7 @@
 %% - Branches (the target has unknown incoming register state)
 %%
 %% The tracked information includes:
-%% - `contents`: maps cpu_reg -> what the register holds
+%% - `contents': maps cpu_reg -> what the register holds
 
 -module(jit_regs).
 
@@ -135,7 +135,7 @@ invalidate_vm_loc(#regs{contents = C} = Regs, VmLoc) ->
     Regs#regs{contents = C1}.
 
 %% @doc Find a CPU register that holds the given contents.
-%% Returns `{ok, Reg}` or `none`.
+%% Returns `{ok, Reg}' or `none'.
 -spec find_reg_with_contents(regs(), contents()) -> {ok, atom()} | none.
 find_reg_with_contents(#regs{contents = C}, Contents) ->
     find_in_map(maps:iterator(C), Contents).
@@ -205,7 +205,7 @@ vm_dest_to_contents({y_reg, Y}, _MaxReg) -> {y_reg, Y};
 vm_dest_to_contents(_, _MaxReg) -> unknown.
 
 %% @doc Convert a list of register atoms to a bitmask.
-%% Skips non-register entries like `imm`, `jit_state`, and `stack`.
+%% Skips non-register entries like `imm', `jit_state', and `stack'.
 %% RegBitFn maps register atoms to their bit positions.
 -spec regs_to_mask([atom()], fun((atom()) -> non_neg_integer())) -> non_neg_integer().
 regs_to_mask([], _RegBitFn) -> 0;

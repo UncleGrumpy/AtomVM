@@ -416,7 +416,7 @@ assert_all_native_free(State) ->
 %% ```
 %% push {r1, r4, r5, r6, r7, r8, r9, r10, r11, lr}
 %% b <label>
-%% ```
+%% '''
 %%
 %% @end
 %% @param State current backend state
@@ -769,7 +769,7 @@ return_if_not_equal_to_ctx(
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a jump to a label. The offset of the relocation is saved and will
-%% be updated with `update_branches/1`.
+%% be updated with `update_branches/1'.
 %% @end
 %% @param State current backend state
 %% @param Label to jump to

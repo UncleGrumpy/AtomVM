@@ -18,10 +18,10 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-%% @doc Parse transform that instruments jit:first_pass/4 clauses with
+%% @doc Parse transform that instruments `jit:first_pass/4' clauses with
 %% DWARF opcode tracking calls. For each clause that matches a binary
-%% pattern <<OpcodeInt, .../binary>>, it injects
-%%   MSt0 = MMod:dwarf_opcode(MSt0__pt, OpcodeInt)
+%% pattern `<<OpcodeInt, .../binary>>', it injects
+%%   `MSt0 = MMod:dwarf_opcode(MSt0__pt, OpcodeInt)'
 %% at the start of the function body, renaming the original MSt0 parameter.
 %%
 %% Clauses for OP_LABEL (opcode 1), OP_LINE (opcode 153), and OP_FUNC_INFO

@@ -651,7 +651,7 @@ return_if_not_equal_to_ctx(
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a jump to a label. The offset of the relocation is saved and will
-%% be updated with `update_branches/2`.
+%% be updated with `update_branches/2'.
 %% @end
 %% @param State current backend state
 %% @param Label to jump to
