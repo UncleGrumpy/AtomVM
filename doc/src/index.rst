@@ -19,7 +19,7 @@ AtomVM includes many advanced features, including process spawning, monitoring, 
 .. warning:: AtomVM is currently in `v0.x stage <https://semver.org/#spec-item-4>`_. Software may contain bugs and should not be used for mission-critical applications.  Application Programming Interfaces may change without warning.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 5
    :caption: Contents:
 
    welcome-to-atomvm

@@ -23,6 +23,8 @@ project(doc)
 # Prepare souces in build directory
 include(${CMAKE_SOURCE_DIR}/CMakeModules/GetVersion.cmake)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/edoc)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/ex_doc/apps)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/elixir)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/src DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
 file(COPY ${CMAKE_SOURCE_DIR}/CONTRIBUTING.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
 file(COPY ${CMAKE_SOURCE_DIR}/C_CODING_STYLE.md DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/src)
@@ -79,10 +81,19 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/erlang)
 file(COPY ${CMAKE_SOURCE_DIR}/libs/include DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/edoc/)
 
 set(ERLANG_LIBS
-    estdlib
-    eavmlib
     alisp
+    avm_emscripten
+    avm_esp32
+    avm_network
+    avm_rp2
+    avm_stm32
+    avm_unix
+    eavmlib
+    esp32boot
+    esp32devmode
+    estdlib
     etest
+    jit
 )
 
 foreach(ERLANG_LIB ${ERLANG_LIBS})
@@ -94,8 +105,22 @@ foreach(ERLANG_LIB ${ERLANG_LIBS})
         COMMENT "Generating edoc markdown for ${ERLANG_LIB}" VERBATIM
         DEPENDS edown-escript
     )
-    set(ERLANG_EDOC_TARGETS ${ERLANG_EDOC_TARGETS} edoc-${ERLANG_LIB})
+    set(DOC_TARGETS ${DOC_TARGETS} edoc-${ERLANG_LIB})
 endforeach(ERLANG_LIB)
+
+set(EX_LIBS
+    exavmlib
+)
+
+foreach(LIB ${EX_LIBS})
+    file(COPY ${CMAKE_SOURCE_DIR}/libs/${LIB} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/ex_doc/apps)
+    add_custom_target(ex_doc-${LIB}
+        COMMAND mix docs -f markdown && mv doc/llms.txt doc/index.md
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/ex_doc/apps/${LIB}
+        COMMENT "Generating ex_doc markdown for ${LIB}" VERBATIM
+    )
+    set(DOC_TARGETS ${DOC_TARGETS} ex_doc-${LIB})
+endforeach(LIB)
 
 # ##
 # ## SVG files (from Graphviz dot files)
@@ -137,14 +162,14 @@ if(SPHINX_FOUND)
         ${SPHINX_BUILD_EXECUTABLE} -q --doctree-dir ${CMAKE_CURRENT_BINARY_DIR}/doctree -b html -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/html/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx HTML documentation" VERBATIM
-        DEPENDS ${DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS}
+        DEPENDS ${DOTFILE_TARGETS} ${DOC_TARGETS}
     )
 
     add_custom_target(sphinx-epub
         ${SPHINX_BUILD_EXECUTABLE} -q --doctree-dir ${CMAKE_CURRENT_BINARY_DIR}/doctree -D exclude_patterns=apidocs/libatomvm/**,LICENSES/** -b epub -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/epub/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx EPub documentation" VERBATIM
-        DEPENDS ${DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS}
+        DEPENDS ${DOTFILE_TARGETS} ${DOC_TARGETS}
     )
 
     ## This target is intended for CI `Publish Docs` workflow.
@@ -175,6 +200,15 @@ foreach(LIBAVM_ERL_LIB ${ERLANG_LIBS})
         COMMENT "Fixing links in ${LIBAVM_ERL_LIB} documentation." VERBATIM
     )
 endforeach(LIBAVM_ERL_LIB)
+
+foreach(LIBAVM_EX_LIB ${EX_LIBS})
+    add_custom_command(TARGET ex_doc-${LIBAVM_EX_LIB} POST_BUILD
+        COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/ex_doc/apps/${LIBAVM_EX_LIB}/doc ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/elixir/${LIBAVM_EX_LIB}
+        COMMAND find ${CMAKE_CURRENT_BINARY_DIR}/src/apidocs/elixir/${LIBAVM_EX_LIB} -name *.md -exec escript ${CMAKE_CURRENT_SOURCE_DIR}/fix_ex_doc_headings.erl {} \;
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/ex_doc/apps/${LIBAVM_EX_LIB}
+        COMMENT "Moving ${LIBAVM_EX_LIB} documentation into place and fixing heading levels." VERBATIM
+    )
+endforeach(LIBAVM_EX_LIB)
 
 add_custom_target(doc #ALL
     DEPENDS sphinx-html sphinx-epub

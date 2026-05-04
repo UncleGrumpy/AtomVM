@@ -31,7 +31,7 @@ add_subdirectory(avm_rp2/src)
 add_subdirectory(avm_stm32/src)
 add_subdirectory(avm_emscripten/src)
 add_subdirectory(avm_unix/src)
-add_subdirectory(esp32boot)
+add_subdirectory(esp32boot/src)
 add_subdirectory(esp32devmode/src)
 add_subdirectory(jit/src)
 
