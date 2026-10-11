@@ -46,6 +46,7 @@
 #if OTP_SOCKET_BSD
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -200,6 +201,7 @@ static const char *const rcvbuf_atom = ATOM_STR("\x6", "rcvbuf");
 static const char *const reuseaddr_atom = ATOM_STR("\x9", "reuseaddr");
 static const char *const type_atom = ATOM_STR("\x4", "type");
 static const char *const add_membership_atom = ATOM_STR("\xE", "add_membership");
+static const char *const nodelay_atom = ATOM_STR("\x7", "nodelay");
 
 #define CLOSED_FD 0
 
@@ -228,13 +230,15 @@ enum otp_socket_setopt_level
     OtpSocketInvalidSetoptLevel = 0,
     OtpSocketSetoptLevelSocket,
     OtpSocketSetoptLevelOTP,
-    OtpSocketSetoptLevelIP
+    OtpSocketSetoptLevelIP,
+    OtpSocketSetoptLevelTCP
 };
 
 static const AtomStringIntPair otp_socket_setopt_level_table[] = {
     { ATOM_STR("\x6", "socket"), OtpSocketSetoptLevelSocket },
     { ATOM_STR("\x3", "otp"), OtpSocketSetoptLevelOTP },
     { ATOM_STR("\x2", "ip"), OtpSocketSetoptLevelIP },
+    { ATOM_STR("\x3", "tcp"), OtpSocketSetoptLevelTCP },
     SELECT_INT_DEFAULT(OtpSocketInvalidSetoptLevel)
 };
 
@@ -1263,6 +1267,47 @@ static term nif_socket_getopt(Context *ctx, int argc, term argv[])
                 RAISE_ERROR(BADARG_ATOM);
             }
         }
+        case OtpSocketSetoptLevelTCP: {
+            term opt = term_get_tuple_element(level_tuple, 1);
+            if (globalcontext_is_term_equal_to_atom_string(global, opt, nodelay_atom)) {
+                term result_val;
+#if OTP_SOCKET_BSD
+                int option_nodelay;
+                socklen_t option_len = sizeof(option_nodelay);
+                int res = getsockopt(rsrc_obj->fd, IPPROTO_TCP, TCP_NODELAY, &option_nodelay, &option_len);
+                if (UNLIKELY(res != 0)) {
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    return make_errno_tuple(ctx);
+                }
+                result_val = option_nodelay ? TRUE_ATOM : FALSE_ATOM;
+#elif OTP_SOCKET_LWIP
+                bool is_tcp;
+                LWIP_BEGIN();
+                is_tcp = (rsrc_obj->socket_state & SocketStateTCP) != 0;
+                if (is_tcp) {
+                    result_val = tcp_nagle_disabled(rsrc_obj->tcp_pcb) ? TRUE_ATOM : FALSE_ATOM;
+                }
+                LWIP_END();
+                if (!is_tcp) {
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    return make_error_tuple(posix_errno_to_term(EINVAL, global), ctx);
+                }
+#endif
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                term result = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(result, 0, OK_ATOM);
+                term_put_tuple_element(result, 1, result_val);
+                SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                return result;
+            } else {
+                SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                RAISE_ERROR(BADARG_ATOM);
+            }
+        }
         default: {
             AVM_LOGE(TAG, "socket:getopt: Unsupported level");
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
@@ -1360,15 +1405,46 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                 SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                 return OK_ATOM;
 #endif
-                // TODO add more as needed
-                // int flag = 1;
-                // int res = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
-                // if (UNLIKELY(res != 0)) {
-                //     AVM_LOGW(TAG, "Failed to set TCP_NODELAY.");
-                // }
             } else {
                 SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                 RAISE_ERROR(BADARG_ATOM);
+            }
+
+            case OtpSocketSetoptLevelTCP: {
+                term opt = term_get_tuple_element(level_tuple, 1);
+                if (globalcontext_is_term_equal_to_atom_string(global, opt, nodelay_atom)) {
+                    int option_nodelay = (value == TRUE_ATOM);
+#if OTP_SOCKET_BSD
+                    int flag = option_nodelay ? 1 : 0;
+                    int res = setsockopt(rsrc_obj->fd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    if (UNLIKELY(res != 0)) {
+                        return make_errno_tuple(ctx);
+                    } else {
+                        return OK_ATOM;
+                    }
+#elif OTP_SOCKET_LWIP
+                    bool is_tcp;
+                    LWIP_BEGIN();
+                    is_tcp = (rsrc_obj->socket_state & SocketStateTCP) != 0;
+                    if (is_tcp) {
+                        if (option_nodelay) {
+                            tcp_nagle_disable(rsrc_obj->tcp_pcb);
+                        } else {
+                            tcp_nagle_enable(rsrc_obj->tcp_pcb);
+                        }
+                    }
+                    LWIP_END();
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    if (!is_tcp) {
+                        return make_error_tuple(posix_errno_to_term(EINVAL, global), ctx);
+                    }
+                    return OK_ATOM;
+#endif
+                } else {
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    RAISE_ERROR(BADARG_ATOM);
+                }
             }
 
             case OtpSocketSetoptLevelOTP: {

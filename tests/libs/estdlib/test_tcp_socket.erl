@@ -31,6 +31,8 @@ test() ->
     ok = test_recv_nowait(),
     ok = test_accept_nowait(),
     ok = test_setopt_getopt(),
+    ok = test_nodelay(),
+    ok = test_nodelay_connected(),
     case erlang:system_info(machine) of
         "ATOM" ->
             ok = test_abandon_select();
@@ -527,6 +529,84 @@ test_setopt_getopt() ->
     ok = socket:close(Socket),
     {error, closed} = socket:getopt(Socket, {socket, type}),
     {error, closed} = socket:setopt(Socket, {socket, reuseaddr}, true),
+    ok.
+
+test_nodelay() ->
+    {ok, Socket} = socket:open(inet, stream, tcp),
+
+    % Disable Nagle: small writes flush immediately
+    ok = socket:setopt(Socket, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(Socket, {tcp, nodelay}),
+
+    % Re-enable Nagle
+    ok = socket:setopt(Socket, {tcp, nodelay}, false),
+    {ok, false} = socket:getopt(Socket, {tcp, nodelay}),
+
+    % idempotent re-set
+    ok = socket:setopt(Socket, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(Socket, {tcp, nodelay}),
+
+    % closed socket -> {error, closed}
+    ok = socket:close(Socket),
+    {error, closed} = socket:setopt(Socket, {tcp, nodelay}, true),
+    {error, closed} = socket:getopt(Socket, {tcp, nodelay}),
+
+    % UDP: TCP_NODELAY is not applicable -> error, not a crash
+    {ok, UDPSocket} = socket:open(inet, dgram, udp),
+    {error, _} = socket:setopt(UDPSocket, {tcp, nodelay}, true),
+    {error, _} = socket:getopt(UDPSocket, {tcp, nodelay}),
+    ok = socket:close(UDPSocket),
+
+    ok.
+
+% Nodelay on a connected (client-side) socket
+test_nodelay_connected() ->
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+
+    Parent = self(),
+    {Child, MonitorRef} = spawn_opt(
+        fun() ->
+            {ok, ConnSocket} = socket:accept(ListenSocket),
+            Parent ! {self(), accepted},
+            receive
+                stop -> ok
+            after 5000 ->
+                exit(timeout)
+            end,
+            socket:close(ConnSocket)
+        end,
+        [link, monitor]
+    ),
+
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = socket:connect(ClientSocket, #{family => inet, addr => loopback, port => Port}),
+    receive
+        {Child, accepted} ->
+            ok
+    after 5000 ->
+        throw({timeout, test_nodelay_connected})
+    end,
+
+    % Nagle is enabled by default on a fresh connection
+    {ok, false} = socket:getopt(ClientSocket, {tcp, nodelay}),
+    ok = socket:setopt(ClientSocket, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(ClientSocket, {tcp, nodelay}),
+    ok = socket:setopt(ClientSocket, {tcp, nodelay}, false),
+    {ok, false} = socket:getopt(ClientSocket, {tcp, nodelay}),
+
+    Child ! stop,
+    ok =
+        receive
+            {'DOWN', MonitorRef, process, Child, normal} -> ok
+        after 5000 ->
+            timeout
+        end,
+    socket:close(ClientSocket),
+    socket:close(ListenSocket),
+
     ok.
 
 %%

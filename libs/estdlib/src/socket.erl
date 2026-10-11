@@ -70,6 +70,7 @@
 
 -type socket_option() ::
     {socket, reuseaddr | linger | type}
+    | {tcp, nodelay}
     | {otp, recvbuf}
     | {ip, add_membership}.
 
@@ -624,11 +625,13 @@ sendto(Socket, Data, Dest) ->
 %%          Currently, the following options are supported:
 %%          <table>
 %%              <tr><td>`{socket, type}'</td><td>`type()'</td></tr>
+%%              <tr><td>`{tcp, nodelay}'</td><td>`boolean()'</td></tr>
 %%          </table>
 %%
 %% Example:
 %%
 %%      `{ok, stream} = socket:getopt(ListeningSocket, {socket, type})'
+%%      `{ok, false} = socket:getopt(ListeningSocket, {tcp, nodelay})'
 %% @end
 %%-----------------------------------------------------------------------------
 -spec getopt(Socket :: socket(), SocketOption :: socket_option()) ->
@@ -649,6 +652,7 @@ getopt(_Socket, _SocketOption) ->
 %%          <table>
 %%              <tr><td>`{socket, reuseaddr}'</td><td>`boolean()'</td></tr>
 %%              <tr><td>`{socket, linger}'</td><td>`#{onoff => boolean(), linger => non_neg_integer()}'</td></tr>
+%%              <tr><td>`{tcp, nodelay}'</td><td>`boolean()'</td></tr>
 %%              <tr><td>`{otp, recvbuf}'</td><td>`non_neg_integer()'</td></tr>
 %%              <tr><td>`{ip, add_membership}'</td><td>`ip_mreq()'</td></tr>
 %%          </table>
@@ -657,6 +661,7 @@ getopt(_Socket, _SocketOption) ->
 %%
 %%      `ok = socket:setopt(ListeningSocket, {socket, reuseaddr}, true)'
 %%      `ok = socket:setopt(ListeningSocket, {socket, linger}, #{onoff => true, linger => 0})'
+%%      `ok = socket:setopt(ListeningSocket, {tcp, nodelay}, true)'
 %% @end
 %%-----------------------------------------------------------------------------
 -spec setopt(Socket :: socket(), SocketOption :: socket_option(), Value :: term()) ->
