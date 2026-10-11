@@ -82,6 +82,7 @@ typedef struct SocketDriverData
     bool binary;
     bool active;
     size_t buffer;
+    bool nodelay;
     ActiveRecvListener *active_listener;
     PassiveRecvListener *passive_listener;
 } SocketDriverData;
@@ -202,6 +203,7 @@ void *socket_driver_create_data(void)
     data->binary = false;
     data->active = true;
     data->buffer = 512;
+    data->nodelay = false;
     data->active_listener = NULL;
     data->passive_listener = NULL;
     return (void *) data;
@@ -340,12 +342,18 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
         return port_create_sys_error_tuple(ctx, SOCKET_ATOM, errno);
     }
     socket_data->sockfd = sockfd;
+    term nodelay = interop_proplist_get_value_default(params, NODELAY_ATOM, FALSE_ATOM);
+    socket_data->nodelay = (nodelay == TRUE_ATOM);
     term address = interop_proplist_get_value(params, ADDRESS_ATOM);
     term port = interop_proplist_get_value(params, PORT_ATOM);
     term ret = do_connect(socket_data, ctx, address, port);
     if (ret != OK_ATOM) {
         close(sockfd);
     } else {
+        if (socket_data->nodelay) {
+            int flag = 1;
+            setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+        }
         if (socket_data->active) {
             ActiveRecvListener *listener = malloc(sizeof(ActiveRecvListener));
             if (IS_NULL_PTR(listener)) {
@@ -386,6 +394,9 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
 
     int flag = 1;
     setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *) &flag, sizeof(int));
+
+    term nodelay = interop_proplist_get_value_default(params, NODELAY_ATOM, FALSE_ATOM);
+    socket_data->nodelay = (nodelay == TRUE_ATOM);
 
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
         close(sockfd);
@@ -1086,6 +1097,10 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
             globalcontext_get_process_unlock(glb, ctx);
             free(listener);
             return NULL;
+        }
+        if (socket_data->nodelay) {
+            int flag = 1;
+            setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
         }
         SocketDriverData *new_socket_data = socket_driver_create_data();
         new_socket_data->sockfd = fd;

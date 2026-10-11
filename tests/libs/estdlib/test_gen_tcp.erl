@@ -31,6 +31,52 @@ test() ->
     ok = test_connect_parameters(),
     ok = test_connect_bad_address(),
     ok = test_tcp_double_close(),
+    ok = test_nodelay(),
+    ok.
+
+test_nodelay() ->
+    ok = test_nodelay(socket),
+    ok = test_nodelay(inet),
+    ok.
+
+test_nodelay(InetBackend) ->
+    io:format("GEN_TCP-NODELAY-TEST> Backend=~p~n", [InetBackend]),
+    {ok, ListenSocket} = gen_tcp:listen(0, [{inet_backend, InetBackend}, binary, {nodelay, true}]),
+    {ok, {_Address, Port}} = inet:sockname(ListenSocket),
+
+    Self = self(),
+    ServerPid = spawn(fun() ->
+        {ok, Socket} = gen_tcp:accept(ListenSocket),
+        Self ! {self(), accepted},
+        receive
+            {tcp, Socket, Data} ->
+                Self ! {self(), Data};
+            {tcp_closed, Socket} ->
+                ok
+        after 5000 ->
+            exit(timeout)
+        end
+    end),
+
+    {ok, ClientSocket} = gen_tcp:connect(
+        {127, 0, 0, 1}, Port, [{inet_backend, InetBackend}, {nodelay, true}, {active, false}]
+    ),
+    receive
+        {ServerPid, accepted} ->
+            ok
+    after 5000 ->
+        throw({timeout, test_nodelay, ?LINE})
+    end,
+    ok = gen_tcp:send(ClientSocket, <<"hello">>),
+    receive
+        {ServerPid, <<"hello">>} ->
+            ok
+    after 5000 ->
+        throw({timeout, test_nodelay, ?LINE})
+    end,
+
+    gen_tcp:close(ClientSocket),
+    gen_tcp:close(ListenSocket),
     ok.
 
 test_echo_server() ->

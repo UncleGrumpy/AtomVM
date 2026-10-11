@@ -47,6 +47,7 @@
 #include <lwip/api.h>
 #include <lwip/inet.h>
 #include <lwip/ip_addr.h>
+#include <lwip/tcp.h>
 #pragma GCC diagnostic pop
 
 //#define ENABLE_TRACE 1
@@ -199,6 +200,7 @@ struct TCPServerSocketData
 {
     struct SocketData socket_data;
     int ready_connections;
+    bool nodelay;
 
     struct ListHead accepters_list_head;
 };
@@ -411,6 +413,7 @@ static struct TCPServerSocketData *tcp_server_socket_data_new(Context *ctx, stru
     }
     socket_data_init(&tcp_data->socket_data, ctx, conn, TCPServerSocket, sockets);
     tcp_data->ready_connections = 0;
+    tcp_data->nodelay = false;
     list_init(&tcp_data->accepters_list_head);
 
     return tcp_data;
@@ -533,6 +536,10 @@ static err_t accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uin
     }
 
     TRACE("accepted conn: %p\n", (void *) accepted_conn);
+
+    if (tcp_data->nodelay) {
+        tcp_nagle_disable(accepted_conn->pcb.tcp);
+    }
 
     Context *new_ctx = context_new(glb);
     new_ctx->native_handler = socket_consume_mailbox;
@@ -917,6 +924,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
     term binary_term = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
     term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
+    term nodelay_term = interop_proplist_get_value_default(params, NODELAY_ATOM, FALSE_ATOM);
     term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
 
     bool ok = term_is_local_pid(controlling_process_term);
@@ -996,6 +1004,10 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
 
     TRACE("tcp: connected.\n");
 
+    if (nodelay_term == TRUE_ATOM) {
+        tcp_nagle_disable(conn->pcb.tcp);
+    }
+
     do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
 }
 
@@ -1017,6 +1029,7 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     term binary_term = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
     term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term buffer_term = interop_proplist_get_value(params, BUFFER_ATOM);
+    term nodelay_term = interop_proplist_get_value_default(params, NODELAY_ATOM, FALSE_ATOM);
 
     avm_int_t port = term_to_int(port_term);
     avm_int_t backlog = term_to_int(backlog_term);
@@ -1076,6 +1089,7 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
     tcp_data->socket_data.buffer = buffer;
+    tcp_data->nodelay = (nodelay_term == TRUE_ATOM);
 
     if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
