@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `{tcp, nodelay}` option to otp_socket
 - Added `{nodelay, Boolean}` option to `gen_tcp:listen/2` and `gen_tcp:connect/3`
+- Added support to http_server to use `{tcp, nodelay}` option
 
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the

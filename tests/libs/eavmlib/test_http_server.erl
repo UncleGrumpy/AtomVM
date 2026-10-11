@@ -22,27 +22,44 @@
 -export([test/0, handle_req/3]).
 
 test() ->
-    ok = test_chunk().
+    ok = test_chunk(),
+    ok = test_chunk_nodelay().
 
 test_chunk() ->
     Router = [
         {"*", ?MODULE, []}
     ],
     Pid = http_server:start_server(8080, Router),
-    {ok, Conn} = connect_client(5),
+    {ok, Conn} = connect_client(8080, 5),
     {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
     ok = loop_passive(Conn2, []),
     exit(Pid, kill),
     ok.
 
-connect_client(Retries) when Retries > 0 ->
-    ConnectResult = ahttp_client:connect(http, "localhost", 8080, [{active, false}]),
+% Uses a distinct port: the listen socket opened by start_server/2 above is owned by
+% this test process (gen_tcp_inet sets {controlling_process, self()} at listen time)
+% and is NOT released by exit(Pid, kill), which only kills the spawned acceptor. 8080
+% therefore cannot be rebound within the same run; SO_REUSEADDR does not help because
+% it covers TIME_WAIT, not an actively listening socket.
+test_chunk_nodelay() ->
+    Router = [
+        {"*", ?MODULE, []}
+    ],
+    Pid = http_server:start_server(8081, Router, [{nodelay, true}]),
+    {ok, Conn} = connect_client(8081, 5),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    ok = loop_passive(Conn2, []),
+    exit(Pid, kill),
+    ok.
+
+connect_client(Port, Retries) when Retries > 0 ->
+    ConnectResult = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
     case ConnectResult of
         {ok, Conn} ->
             {ok, Conn};
         {error, _} = ConnectError ->
             io:format("Request failed: ~p~n", [ConnectError]),
-            connect_client(Retries - 1)
+            connect_client(Port, Retries - 1)
     end.
 
 handle_req("GET", [], Conn) ->
