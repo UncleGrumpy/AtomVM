@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{select, {SelectInfo, RestData}}`, followed by a `{'$socket', Socket, select, SelectHandle}`
   message when the socket is writable again)
 - Added `{tcp, nodelay}` option to otp_socket
+- Added `{nodelay, Boolean}` option to `gen_tcp:listen/2` and `gen_tcp:connect/3`
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.

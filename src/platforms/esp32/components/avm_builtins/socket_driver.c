@@ -47,6 +47,8 @@
 #include <lwip/api.h>
 #include <lwip/inet.h>
 #include <lwip/ip_addr.h>
+#include <lwip/tcp.h>
+#include <lwip/tcpip.h>
 #pragma GCC diagnostic pop
 
 //#define ENABLE_TRACE 1
@@ -199,6 +201,7 @@ struct TCPServerSocketData
 {
     struct SocketData socket_data;
     int ready_connections;
+    bool nodelay;
 
     struct ListHead accepters_list_head;
 };
@@ -411,6 +414,7 @@ static struct TCPServerSocketData *tcp_server_socket_data_new(Context *ctx, stru
     }
     socket_data_init(&tcp_data->socket_data, ctx, conn, TCPServerSocket, sockets);
     tcp_data->ready_connections = 0;
+    tcp_data->nodelay = false;
     list_init(&tcp_data->accepters_list_head);
 
     return tcp_data;
@@ -509,6 +513,27 @@ static void purge_ready_connections(struct ESP32PlatformData *platform, struct n
     }
 }
 
+// tcp_nagle_disable() writes pcb flags owned by the TCP/IP thread.  This
+// driver runs on scheduler threads, and lwIP here is built without core
+// locking (LWIP_TCPIP_CORE_LOCKING == 0 in ESP-IDF, where LOCK_TCPIP_CORE()
+// expands to nothing), so run the update in the TCP/IP thread with
+// tcpip_callback_wait(); if core locking is enabled, the same call runs it
+// under the core lock instead.  The pcb may already have been freed by an
+// error callback: re-check it inside the callback, which runs serialized
+// with the core, so the pointer cannot change under it.
+static void tcp_nodelay_update(void *arg)
+{
+    struct netconn *conn = arg;
+    if (conn->pcb.tcp != NULL) {
+        tcp_nagle_disable(conn->pcb.tcp);
+    }
+}
+
+static void tcp_apply_nodelay(struct netconn *conn)
+{
+    (void) tcpip_callback_wait(tcp_nodelay_update, conn);
+}
+
 static err_t accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint64_t ref_ticks, int32_t pid)
 {
     TRACE("Going to accept a TCP connection\n");
@@ -533,6 +558,10 @@ static err_t accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uin
     }
 
     TRACE("accepted conn: %p\n", (void *) accepted_conn);
+
+    if (tcp_data->nodelay) {
+        tcp_apply_nodelay(accepted_conn);
+    }
 
     Context *new_ctx = context_new(glb);
     new_ctx->native_handler = socket_consume_mailbox;
@@ -917,6 +946,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     term port_term = interop_proplist_get_value(params, PORT_ATOM);
     term binary_term = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
     term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
+    term nodelay_term = interop_proplist_get_value_default(params, NODELAY_ATOM, FALSE_ATOM);
     term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
 
     bool ok = term_is_local_pid(controlling_process_term);
@@ -996,6 +1026,10 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
 
     TRACE("tcp: connected.\n");
 
+    if (nodelay_term == TRUE_ATOM) {
+        tcp_apply_nodelay(conn);
+    }
+
     do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
 }
 
@@ -1017,6 +1051,7 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     term binary_term = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
     term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term buffer_term = interop_proplist_get_value(params, BUFFER_ATOM);
+    term nodelay_term = interop_proplist_get_value_default(params, NODELAY_ATOM, FALSE_ATOM);
 
     avm_int_t port = term_to_int(port_term);
     avm_int_t backlog = term_to_int(backlog_term);
@@ -1076,6 +1111,7 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
     tcp_data->socket_data.buffer = buffer;
+    tcp_data->nodelay = (nodelay_term == TRUE_ATOM);
 
     if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();

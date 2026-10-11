@@ -49,6 +49,7 @@
     {active, boolean()}
     | {buffer, pos_integer()}
     | {timeout, timeout()}
+    | {nodelay, boolean()}
     | list
     | binary
     | {binary, boolean()}
@@ -78,6 +79,8 @@
 %%              <li><b>buffer</b> Size of the receive buffer to use in active mode (default: 512)</li>
 %%              <li><b>binary</b> data is received as binaries (as opposed to lists)</li>
 %%              <li><b>list</b> data is received as lists (default)</li>
+%%              <li><b>{nodelay, Boolean}</b> disable Nagle's algorithm on the connected
+%%              socket, so small writes are sent immediately (default: false)</li>
 %%          </ul>
 %%
 %%          If the socket is connected in active mode, then the calling process
