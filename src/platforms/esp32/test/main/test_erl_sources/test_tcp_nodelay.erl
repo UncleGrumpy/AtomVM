@@ -37,6 +37,8 @@ start() ->
         ok = test_socket_nodelay_accepted(),
         ok = test_socket_opts(),
         ok = test_socket_nodelay_errors(),
+        ok = test_nodelay_listener(inet),
+        ok = test_nodelay_listener(socket),
         0
     catch
         Class:Reason:Stack ->
@@ -126,6 +128,40 @@ test_socket_nodelay_errors() ->
     ok = socket:close(UDPSocket),
     ok.
 
+test_nodelay_listener(Backend) ->
+    {ok, LS} = gen_tcp:listen(0, [
+        binary,
+        {nodelay, true},
+        {active, false},
+        {inet_backend, Backend}
+    ]),
+    {ok, {_Address, Port}} = inet:sockname(LS),
+    Self = self(),
+    spawn(fun() ->
+        Res =
+            try
+                acceptor(LS)
+            catch
+                Class:Reason ->
+                    {acceptor_failed, Class, Reason}
+            end,
+        Self ! {acceptor_done, Res}
+    end),
+    {ok, Client} = gen_tcp:connect(
+        {127, 0, 0, 1}, Port, [binary, {nodelay, true}, {active, false}]
+    ),
+    ok = gen_tcp:send(Client, <<"world">>),
+    {ok, <<"hello">>} = gen_tcp:recv(Client, 0, 5000),
+    ok = gen_tcp:close(Client),
+    ok = gen_tcp:close(LS),
+    receive
+        {acceptor_done, ok} -> ok
+    after 5000 ->
+        throw({timeout, acceptor})
+    end,
+
+    ok.
+
 wait_accept_select(ListenSocket, Ref) ->
     receive
         {'$socket', ListenSocket, select, Ref} ->
@@ -133,3 +169,10 @@ wait_accept_select(ListenSocket, Ref) ->
     after 10000 ->
         throw({timeout, accept_select})
     end.
+
+acceptor(ListenSocket) ->
+    {ok, Socket} = gen_tcp:accept(ListenSocket),
+    {ok, <<"world">>} = gen_tcp:recv(Socket, 0, 5000),
+    ok = gen_tcp:send(Socket, <<"hello">>),
+    ok = gen_tcp:close(Socket),
+    ok.

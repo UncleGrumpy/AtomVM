@@ -46,6 +46,15 @@ connect_client(Retries) when Retries > 0 ->
     end.
 
 handle_req("GET", [], Conn) ->
+    Socket = proplists:get_value(socket, Conn),
+    % The listener may or may not set nodelay; toggle from whatever the
+    % accepted socket inherited.
+    {ok, [{nodelay, Initial}]} = inet:getopts(Socket, [nodelay]),
+    ok = inet:setopts(Socket, [{nodelay, not Initial}]),
+    {ok, [{nodelay, Toggled}]} = inet:getopts(Socket, [nodelay]),
+    Toggled = not Initial,
+    ok = inet:setopts(Socket, [{nodelay, Initial}]),
+    {ok, [{nodelay, Initial}]} = inet:getopts(Socket, [nodelay]),
     Body = [34, <<"hello">>],
     http_server:reply(200, Body, Conn).
 
