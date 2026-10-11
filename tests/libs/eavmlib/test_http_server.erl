@@ -22,7 +22,12 @@
 -export([test/0, handle_req/3]).
 
 test() ->
-    ok = test_chunk().
+    ok = test_chunk(),
+    ok = test_chunk_nodelay(inet),
+    ok = test_chunk_nodelay(socket),
+    ok = test_binary_false(),
+    ok = test_unsupported_options(),
+    ok.
 
 test_chunk() ->
     Router = [
@@ -42,14 +47,92 @@ test_chunk() ->
     end,
     ok.
 
-connect_client(Retries) when Retries > 0 ->
-    ConnectResult = ahttp_client:connect(http, "localhost", 8080, [{active, false}]),
+% Uses a distinct port: the listen socket opened by start_server/2 above is owned by
+% this test process (gen_tcp_inet sets {controlling_process, self()} at listen time)
+% and is NOT released by exit(Pid, kill), which only kills the spawned acceptor. 8080
+% therefore cannot be rebound within the same run; SO_REUSEADDR does not help because
+% it covers TIME_WAIT, not an actively listening socket.
+% Each backend gets its own port: as above, the listen socket opened for a
+% backend is not released by exit(Pid, kill) within the same run, so the
+% socket-backend server cannot bind 8081 after the inet-backend sub-test.
+test_chunk_nodelay(Backend) ->
+    Port =
+        case Backend of
+            inet -> 8081;
+            socket -> 8082
+        end,
+    Router = [
+        {"*", ?MODULE, []}
+    ],
+    % No `list` option: start_server/3 must add it itself, since the socket
+    % backend would otherwise deliver binaries (its default without `list`).
+    Pid = http_server:start_server(Port, Router, [{nodelay, true}, {inet_backend, Backend}]),
+    try
+        true = is_pid(Pid),
+        {ok, Conn} = connect_client(Port, 5),
+        {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+        ok = loop_passive(Conn2, [])
+    after
+        ahttp_client:close(Conn2),
+        case is_pid(Pid) of
+            true -> exit(Pid, kill);
+            false -> ok
+        end
+    end,
+    ok.
+
+% {binary, false} is a valid AtomVM option meaning list mode (the form does not exist on OTP),
+% so start_server/3 must accept it and still serve requests as lists.
+test_binary_false() ->
+    Router = [
+        {"*", ?MODULE, []}
+    ],
+    Pid = http_server:start_server(8084, Router, [{binary, false}]),
+    true = is_pid(Pid),
+    {ok, Conn} = connect_client(8084, 5),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    ok = loop_passive(Conn2, []),
+    exit(Pid, kill),
+    ok.
+
+% Options are validated before listen, so no socket is bound here and the port is arbitrary.
+test_unsupported_options() ->
+    Router = [
+        {"*", ?MODULE, []}
+    ],
+    % binary in every form
+    {error, {unsupported, [binary]}} = http_server:start_server(8083, Router, [
+        {nodelay, true}, binary
+    ]),
+    {error, {unsupported, [{binary, true}]}} = http_server:start_server(8083, Router, [
+        {binary, true}
+    ]),
+    % passive in every form
+    {error, {unsupported, [{active, false}]}} = http_server:start_server(8083, Router, [
+        {active, false}
+    ]),
+    {error, {unsupported, [{active, once}]}} = http_server:start_server(8083, Router, [
+        {active, once}
+    ]),
+    % every unsupported form is reported, in order; valid options are untouched
+    {error, {unsupported, [binary, {active, false}]}} = http_server:start_server(8083, Router, [
+        binary, {nodelay, true}, {active, false}
+    ]),
+    {error, {unsupported, [{binary, true}, {active, once}]}} = http_server:start_server(
+        8083,
+        Router,
+        [{binary, true}, {active, once}]
+    ),
+    ok.
+
+connect_client(Port, Retries) when Retries > 0 ->
+    ConnectResult = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
     case ConnectResult of
         {ok, Conn} ->
             {ok, Conn};
         {error, _} = ConnectError ->
             io:format("Request failed: ~p~n", [ConnectError]),
-            connect_client(Retries - 1)
+            connect_client(Port, Retries - 1)
     end.
 
 handle_req("GET", [], Conn) ->

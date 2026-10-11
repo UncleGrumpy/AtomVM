@@ -20,23 +20,56 @@
 
 -module(http_server).
 
--export([start_server/2, reply/3, reply/4, parse_query_string/1]).
+-export([start_server/2, start_server/3, reply/3, reply/4, parse_query_string/1]).
 
 start_server(Port, Router) ->
-    case gen_tcp:listen(Port, []) of
-        {ok, ListenSocket} ->
-            spawn(fun() -> accept(ListenSocket, Router) end);
-        Error ->
-            erlang:display(Error)
+    start_server(Port, Router, []).
+
+start_server(Port, Router, Options) ->
+    case unsupported_options(Options) of
+        [] ->
+            case gen_tcp:listen(Port, [list | Options]) of
+                {ok, ListenSocket} ->
+                    spawn(fun() -> accept(ListenSocket, Router) end);
+                Error ->
+                    erlang:display(Error),
+                    Error
+            end;
+        InvalidOpts ->
+            {error, {unsupported, InvalidOpts}}
     end.
+
+% Requests are served in active mode with list packets (see loop/1 and
+% parse_http/2), so `list` is always added to the options passed to
+% gen_tcp:listen/2 (the socket backend defaults to binary delivery), and
+% options selecting binary mode (`binary` or `{binary, true}`) or passive
+% mode (any `{active, _}` other than `{active, true}`, e.g. `{active, false}`
+% or `{active, once}`) are rejected.
+unsupported_options(Options) ->
+    unsupported_options(Options, []).
+
+unsupported_options([binary | Tail], Acc) ->
+    unsupported_options(Tail, [binary | Acc]);
+unsupported_options([{binary, true} = Option | Tail], Acc) ->
+    unsupported_options(Tail, [Option | Acc]);
+unsupported_options([{active, true} | Tail], Acc) ->
+    unsupported_options(Tail, Acc);
+unsupported_options([{active, _} = Option | Tail], Acc) ->
+    unsupported_options(Tail, [Option | Acc]);
+unsupported_options([_Option | Tail], Acc) ->
+    unsupported_options(Tail, Acc);
+unsupported_options([], Acc) ->
+    reverse(Acc).
 
 accept(ListenSocket, Router) ->
     case gen_tcp:accept(ListenSocket) of
         {ok, _Socket} ->
             spawn(fun() -> accept(ListenSocket, Router) end),
             loop(Router);
-        Error ->
-            erlang:display(Error)
+        {error, Error} ->
+            gen_tcp:close(ListenSocket),
+            erlang:display(Error),
+            erlang:error(Error)
     end.
 
 loop(Router) ->
