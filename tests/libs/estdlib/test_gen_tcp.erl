@@ -568,7 +568,8 @@ test_eaddrinuse(InetBackend) ->
     ok.
 
 test_reuseaddr() ->
-    ok = test_reuseaddr(inet).
+    ok = test_reuseaddr(inet),
+    ok = test_reuseaddr(socket).
 
 % {reuseaddr, true} allows rebinding a listen port left in TIME_WAIT by a
 % server-side close; without the option rebinding fails, as on OTP.

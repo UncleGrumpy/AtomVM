@@ -48,6 +48,7 @@
     {active, boolean()}
     | {buffer, pos_integer()}
     | {timeout, timeout()}
+    | {reuseaddr, boolean()}
     | list
     | binary.
 
@@ -120,27 +121,43 @@ listen(Port, Options) ->
     ControllingProcess = self(),
     case socket:open(inet, stream, tcp) of
         {ok, Socket} ->
-            EffectiveOptions = maps:merge(
-                ?DEFAULT_OPTIONS, proplist_to_map(Options)
-            ),
-            Addr = maps:get(ifaddr, EffectiveOptions, any),
-            case socket:bind(Socket, #{family => inet, addr => Addr, port => Port}) of
+            OptMap = proplist_to_map(Options),
+            case maybe_set_reuseaddr(Socket, OptMap) of
                 ok ->
-                    case socket:listen(Socket) of
+                    EffectiveOptions = maps:merge(?DEFAULT_OPTIONS, OptMap),
+                    Addr = maps:get(ifaddr, EffectiveOptions, any),
+                    case socket:bind(Socket, #{family => inet, addr => Addr, port => Port}) of
                         ok ->
-                            gen_server:start_link(
-                                ?MODULE, {Socket, ControllingProcess, listen, EffectiveOptions}, []
-                            );
-                        ListenError ->
+                            case socket:listen(Socket) of
+                                ok ->
+                                    gen_server:start_link(
+                                        ?MODULE,
+                                        {Socket, ControllingProcess, listen, EffectiveOptions},
+                                        []
+                                    );
+                                ListenError ->
+                                    socket:close(Socket),
+                                    ListenError
+                            end;
+                        BindError ->
                             socket:close(Socket),
-                            ListenError
+                            BindError
                     end;
-                BindError ->
+                OptionError ->
                     socket:close(Socket),
-                    BindError
+                    OptionError
             end;
         OpenError ->
             OpenError
+    end.
+
+%% @private
+maybe_set_reuseaddr(Socket, OptMap) ->
+    case maps:get(reuseaddr, OptMap, undefined) of
+        Bool when is_boolean(Bool) ->
+            socket:setopt(Socket, {socket, reuseaddr}, Bool);
+        _ ->
+            ok
     end.
 
 %% @hidden

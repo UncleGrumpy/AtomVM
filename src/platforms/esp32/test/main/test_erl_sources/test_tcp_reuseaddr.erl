@@ -30,6 +30,8 @@
 start() ->
     try
         ok = test_eaddrinuse(inet),
+        ok = test_eaddrinuse(socket),
+        ok = test_reuseaddr_rebind(socket),
         % test_main.c expects this to differ by ESP-IDF version (>= 5.4 vs
         % older): 0 = {reuseaddr, true} worked, 1 = it was rejected with badarg.
         test_reuseaddr_rebind(inet)
