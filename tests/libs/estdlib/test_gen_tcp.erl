@@ -31,6 +31,7 @@ test() ->
     ok = test_connect_parameters(),
     ok = test_connect_bad_address(),
     ok = test_tcp_double_close(),
+    ok = test_eaddrinuse(),
     case erlang:system_info(machine) of
         "ATOM" ->
             ok = test_send_backpressure();
@@ -548,5 +549,19 @@ test_send_backpressure() ->
         after 5000 -> throw({timeout, test_send_backpressure, ?LINE})
         end,
     Acceptor ! close_server,
+    ok = gen_tcp:close(ListenSocket),
+    ok.
+
+% A second listener on a port that is actively listened on fails with
+% eaddrinuse, as on OTP.
+test_eaddrinuse() ->
+    ok = test_eaddrinuse(inet),
+    ok = test_eaddrinuse(socket).
+
+test_eaddrinuse(InetBackend) ->
+    io:format("GEN_TCP-EADDRINUSE-TEST> Backend=~p~n", [InetBackend]),
+    {ok, ListenSocket} = gen_tcp:listen(0, [{inet_backend, InetBackend}]),
+    {ok, {_, Port}} = inet:sockname(ListenSocket),
+    {error, eaddrinuse} = gen_tcp:listen(Port, [{inet_backend, InetBackend}]),
     ok = gen_tcp:close(ListenSocket),
     ok.

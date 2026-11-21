@@ -61,6 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existing macOS 15 coverage is unchanged
 - `erlang:term_to_binary/1,2` and `erlang:binary_to_term/1,2` now process nested lists, tuples
   and maps iteratively
+- Bind failures are now reported as `{error, eaddrinuse}` by the socket NIFs (previously
+  `{error, 98}`) and by the generic_unix inet backend (previously `{error, {bind, 98}}`), matching
+  OTP; the esp32 inet backend already reported `eaddrinuse`
 
 ### Removed
 - Removed support for BEAM files compiled by OTP 26 with the `no_init_yregs`, `no_make_fun3`,

@@ -27,6 +27,7 @@
 #include "interop.h"
 #include "mailbox.h"
 #include "port.h"
+#include "posix_nifs.h"
 #include "term.h"
 #include "utils.h"
 #include <limits.h>
@@ -231,7 +232,8 @@ static term do_bind(Context *ctx, term address, term port)
     serveraddr.sin_port = htons(p);
     socklen_t address_len = sizeof(serveraddr);
     if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
-        return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
+        // Match OTP, which reports the errno (e.g. eaddrinuse) for a failed bind
+        return port_create_error_tuple(ctx, posix_errno_to_term(errno, ctx->global));
     } else {
         TRACE("socket_driver|do_bind: bound to %ld\n", p);
         if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
