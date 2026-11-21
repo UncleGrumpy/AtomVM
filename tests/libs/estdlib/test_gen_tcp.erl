@@ -32,6 +32,7 @@ test() ->
     ok = test_connect_bad_address(),
     ok = test_tcp_double_close(),
     ok = test_eaddrinuse(),
+    ok = test_reuseaddr(),
     case erlang:system_info(machine) of
         "ATOM" ->
             ok = test_send_backpressure();
@@ -565,3 +566,105 @@ test_eaddrinuse(InetBackend) ->
     {error, eaddrinuse} = gen_tcp:listen(Port, [{inet_backend, InetBackend}]),
     ok = gen_tcp:close(ListenSocket),
     ok.
+
+test_reuseaddr() ->
+    ok = test_reuseaddr(inet).
+
+% {reuseaddr, true} allows rebinding a listen port left in TIME_WAIT by a
+% server-side close; without the option rebinding fails, as on OTP.
+%
+% FreeBSD does not hold a locally closed connection's port in TIME_WAIT the
+% way Linux does: 14.x defaults net.inet.tcp.nolocaltimewait to true, closing
+% local connections without TIME_WAIT at all, and 15.0 keeps them in TIME_WAIT
+% for only 20ms (net.inet.tcp.msl_local). There a plain rebind succeeds, as
+% it does for OTP on the same OS, so either outcome is accepted.
+test_reuseaddr(InetBackend) ->
+    io:format("GEN_TCP-REUSEADDR-TEST> Backend=~p~n", [InetBackend]),
+
+    case time_wait_blocks_rebind() of
+        true ->
+            {error, eaddrinuse} = rebind_after_server_close(InetBackend, []);
+        false ->
+            case rebind_after_server_close(InetBackend, []) of
+                {ok, ListenSocket1} -> ok = gen_tcp:close(ListenSocket1);
+                {error, eaddrinuse} -> ok
+            end
+    end,
+
+    {ok, ListenSocket2} = rebind_after_server_close(InetBackend, [{reuseaddr, true}]),
+    ok = gen_tcp:close(ListenSocket2),
+    ok.
+
+% The accepted socket is closed by the server first, so the listening port is
+% left in TIME_WAIT when it is rebound on most OSes and platforms.
+rebind_after_server_close(InetBackend, ListenOpts) ->
+    {ok, ListenSocket} = gen_tcp:listen(0, [{inet_backend, InetBackend} | ListenOpts]),
+    {ok, {_, Port}} = inet:sockname(ListenSocket),
+    {ok, ClientSocket} = gen_tcp:connect(
+        {127, 0, 0, 1}, Port, [{inet_backend, InetBackend}, {active, false}]
+    ),
+    {ok, Socket} = gen_tcp:accept(ListenSocket),
+    ok = gen_tcp:close(Socket),
+    ok = gen_tcp:close(ClientSocket),
+    ok = gen_tcp:close(ListenSocket),
+    timer:sleep(50),
+    gen_tcp:listen(Port, [{inet_backend, InetBackend} | ListenOpts]).
+
+% Whether the OS holds a server-side closed connection's listen port in
+% TIME_WAIT, so a plain rebind fails with eaddrinuse.
+time_wait_blocks_rebind() ->
+    case uname_kernel_name() of
+        "FreeBSD\n" ->
+            false;
+        "" ->
+            erlang:error({uname_failed, ""});
+        _ ->
+            true
+    end.
+
+uname_kernel_name() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            Exe = os:find_executable("uname"),
+            Port = open_port({spawn_executable, Exe}, [{args, ["-s"]}, eof, exit_status]),
+            KernelName = beam_read_all(Port, []),
+            ok = beam_check_exit_status(Port),
+            KernelName;
+        "ATOM" ->
+            {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", "uname -s"], undefined, [
+                stdout
+            ]),
+            KernelName = atomvm_read_all(Fd, []),
+            ok = atomvm:posix_close(Fd),
+            KernelName
+    end.
+
+beam_read_all(Port, Acc) ->
+    receive
+        {Port, {data, Data}} ->
+            beam_read_all(Port, [Data | Acc]);
+        {Port, eof} ->
+            lists:flatten(lists:reverse(Acc))
+    after 30000 ->
+        erlang:error(uname_output_timeout)
+    end.
+
+beam_check_exit_status(Port) ->
+    receive
+        {Port, {exit_status, 0}} ->
+            ok;
+        {Port, {exit_status, Status}} ->
+            erlang:error({uname_exit_status, Status})
+    after 30000 ->
+        erlang:error(uname_exit_status_timeout)
+    end.
+
+atomvm_read_all(Fd, Acc) ->
+    case atomvm:posix_read(Fd, 10) of
+        eof ->
+            lists:flatten(lists:reverse(Acc));
+        {error, eintr} ->
+            atomvm_read_all(Fd, Acc);
+        {ok, Line} ->
+            atomvm_read_all(Fd, [binary_to_list(Line) | Acc])
+    end.

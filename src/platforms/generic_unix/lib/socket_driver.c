@@ -386,8 +386,12 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
     }
     socket_data->sockfd = sockfd;
 
-    int flag = 1;
-    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *) &flag, sizeof(int));
+    term reuseaddr = interop_proplist_get_value_default(params, REUSEADDR_ATOM, FALSE_ATOM);
+    if (reuseaddr == TRUE_ATOM) {
+        // Match OTP inet: SO_REUSEADDR is opt-in ({reuseaddr, true} listen option)
+        int flag = 1;
+        setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *) &flag, sizeof(int));
+    }
 
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
         close(sockfd);

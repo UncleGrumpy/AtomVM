@@ -636,6 +636,23 @@ TEST_CASE("atomvm_smp_0", "[smp]")
 }
 #endif
 
+TEST_CASE("test_tcp_reuseaddr", "[test_run]")
+{
+    // The test uses listen-only semantics: no interface or IP address is
+    // required.  esp_netif_init() was called by network_driver_init at boot.
+    //
+    // The inet backend only supports {reuseaddr, true} where tcpip_callback_wait()
+    // is available (lwIP 2.2, ESP-IDF 5.4+); older ESP-IDF rejects the option with
+    // badarg.  The test reports which outcome it saw: 0 = option worked, 1 = option
+    // rejected.
+    term ret_value = avm_test_case("test_tcp_reuseaddr.beam");
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
+    TEST_ASSERT(term_to_int(ret_value) == 0);
+#else
+    TEST_ASSERT(term_to_int(ret_value) == 1);
+#endif
+}
+
 #if CONFIG_ETH_USE_OPENETH
 static volatile bool network_got_ip = false;
 

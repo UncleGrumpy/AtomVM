@@ -34,6 +34,7 @@
     {active, boolean()}
     | {buffer, pos_integer()}
     | {timeout, timeout()}
+    | {reuseaddr, boolean()}
     | list
     | binary
     | {binary, boolean()}.
