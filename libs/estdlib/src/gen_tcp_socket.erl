@@ -48,6 +48,7 @@
     {active, boolean()}
     | {buffer, pos_integer()}
     | {timeout, timeout()}
+    | {nodelay, boolean()}
     | list
     | binary.
 
@@ -78,12 +79,20 @@ connect(Address, Port, Options) ->
                         socket:connect(Socket, #{family => inet, addr => Address0, port => Port})
                     of
                         ok ->
-                            EffectiveOptions = maps:merge(
-                                ?DEFAULT_OPTIONS, proplist_to_map(Options)
-                            ),
-                            gen_server:start_link(
-                                ?MODULE, {Socket, ControllingProcess, connect, EffectiveOptions}, []
-                            );
+                            case maybe_apply_nodelay(Socket, Options) of
+                                ok ->
+                                    EffectiveOptions = maps:merge(
+                                        ?DEFAULT_OPTIONS, proplist_to_map(Options)
+                                    ),
+                                    gen_server:start_link(
+                                        ?MODULE,
+                                        {Socket, ControllingProcess, connect, EffectiveOptions},
+                                        []
+                                    );
+                                OptionError ->
+                                    socket:close(Socket),
+                                    OptionError
+                            end;
                         ConnectError ->
                             socket:close(Socket),
                             ConnectError
@@ -464,6 +473,15 @@ terminate(Reason, State) ->
 %%
 
 %% @private
+maybe_apply_nodelay(Socket, Options) ->
+    case proplists:get_value(nodelay, Options) of
+        Bool when is_boolean(Bool) ->
+            socket:setopt(Socket, {tcp, nodelay}, Bool);
+        _ ->
+            ok
+    end.
+
+%% @private
 proplist_to_map(PropList) ->
     proplist_to_map(PropList, #{}).
 
@@ -529,9 +547,15 @@ handle_accept(State, From, AcceptingProc) ->
     case socket:nif_accept(Socket) of
         {ok, ConnectedSocket} ->
             Reply =
-                gen_server:start_link(
-                    ?MODULE, {ConnectedSocket, ControllingProcess, accept, Options}, []
-                ),
+                case maybe_apply_nodelay(ConnectedSocket, maps:to_list(Options)) of
+                    ok ->
+                        gen_server:start_link(
+                            ?MODULE, {ConnectedSocket, ControllingProcess, accept, Options}, []
+                        );
+                    Error ->
+                        socket:nif_select_stop(Socket),
+                        Error
+                end,
             ?LOG_INFO("Accepted connection.  Attempted to start connected socket: ~p", [Reply]),
             gen_server:reply(From, Reply),
             State;
