@@ -27,6 +27,7 @@
 #include "interop.h"
 #include "mailbox.h"
 #include "port.h"
+#include "posix_nifs.h"
 #include "term.h"
 #include "utils.h"
 #include <limits.h>
@@ -231,7 +232,8 @@ static term do_bind(Context *ctx, term address, term port)
     serveraddr.sin_port = htons(p);
     socklen_t address_len = sizeof(serveraddr);
     if (bind(socket_data->sockfd, (struct sockaddr *) &serveraddr, address_len) == -1) {
-        return port_create_sys_error_tuple(ctx, BIND_ATOM, errno);
+        // Match OTP, which reports the errno (e.g. eaddrinuse) for a failed bind
+        return port_create_error_tuple(ctx, posix_errno_to_term(errno, ctx->global));
     } else {
         TRACE("socket_driver|do_bind: bound to %ld\n", p);
         if (getsockname(socket_data->sockfd, (struct sockaddr *) &serveraddr, &address_len) == -1) {
@@ -384,8 +386,12 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
     }
     socket_data->sockfd = sockfd;
 
-    int flag = 1;
-    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *) &flag, sizeof(int));
+    term reuseaddr = interop_proplist_get_value_default(params, REUSEADDR_ATOM, FALSE_ATOM);
+    if (reuseaddr == TRUE_ATOM) {
+        // Match OTP inet: SO_REUSEADDR is opt-in ({reuseaddr, true} listen option)
+        int flag = 1;
+        setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *) &flag, sizeof(int));
+    }
 
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
         close(sockfd);

@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{error, {timeout, RestData}}`) or made asynchronous (`{select, SelectInfo}` or
   `{select, {SelectInfo, RestData}}`, followed by a `{'$socket', Socket, select, SelectHandle}`
   message when the socket is writable again)
+- Added `{reuseaddr, Boolean}` option support to `gen_tcp:listen/2` with `{inet_backend, socket}`
 
 ### Changed
 - With BSD sockets (generic_unix, ESP32), `socket:connect/2` returns the reason a connect failed,
@@ -61,6 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existing macOS 15 coverage is unchanged
 - `erlang:term_to_binary/1,2` and `erlang:binary_to_term/1,2` now process nested lists, tuples
   and maps iteratively
+- Bind failures are now reported as `{error, eaddrinuse}` by the socket NIFs (previously
+  `{error, 98}`) and by the generic_unix inet backend (previously `{error, {bind, 98}}`), matching
+  OTP; the esp32 inet backend already reported `eaddrinuse`
+- The inet backend no longer sets `SO_REUSEADDR` unconditionally on listening sockets: it is now
+  opt-in with the `{reuseaddr, true}` `gen_tcp:listen/2` option, matching OTP. The esp32 inet
+  backend, which did not set it at all, gains the same opt-in support on builds with ESP-IDF 5.4
+  or newer; on older ESP-IDF, whose lwIP has no synchronous tcp/ip callback to set the pcb flag
+  before bind, the option is rejected with `{error, badarg}`
 
 ### Removed
 - Removed support for BEAM files compiled by OTP 26 with the `no_init_yregs`, `no_make_fun3`,

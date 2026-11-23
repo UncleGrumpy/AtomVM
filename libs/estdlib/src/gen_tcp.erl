@@ -49,6 +49,7 @@
     {active, boolean()}
     | {buffer, pos_integer()}
     | {timeout, timeout()}
+    | {reuseaddr, boolean()}
     | list
     | binary
     | {binary, boolean()}
@@ -78,6 +79,9 @@
 %%              <li><b>buffer</b> Size of the receive buffer to use in active mode (default: 512)</li>
 %%              <li><b>binary</b> data is received as binaries (as opposed to lists)</li>
 %%              <li><b>list</b> data is received as lists (default)</li>
+%%              <li><b>{reuseaddr, Boolean}</b> for listen, allow rebinding the local
+%%              port while previous connections from it are in TIME_WAIT, e.g. to
+%%              restart a server immediately (default: false)</li>
 %%          </ul>
 %%
 %%          If the socket is connected in active mode, then the calling process

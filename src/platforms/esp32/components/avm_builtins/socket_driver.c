@@ -46,7 +46,11 @@
 #include <esp_log.h>
 #include <lwip/api.h>
 #include <lwip/inet.h>
+#include <lwip/ip.h>
 #include <lwip/ip_addr.h>
+#include <lwip/tcp.h>
+#include <lwip/tcpip.h>
+#include <esp_idf_version.h>
 #pragma GCC diagnostic pop
 
 //#define ENABLE_TRACE 1
@@ -900,6 +904,29 @@ static bool bool_term_to_bool(term b, bool *ok)
     }
 }
 
+// SOF_REUSEADDR is a pcb flag owned by the TCP/IP thread.  This driver runs
+// on scheduler threads and lwIP here is built without core locking
+// (LWIP_TCPIP_CORE_LOCKING == 0 in ESP-IDF, where LOCK_TCPIP_CORE() expands
+// to nothing), so run the update in the TCP/IP thread with
+// tcpip_callback_wait(), which was added in lwIP 2.2, shipped with
+// ESP-IDF 5.4.  On older ESP-IDF there is no safe synchronous equivalent
+// (tcpip_callback() only posts the request, so bind could run before the
+// flag is set), and the option is rejected instead.
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
+static void tcp_reuseaddr_update(void *arg)
+{
+    struct netconn *conn = arg;
+    if (conn->pcb.tcp != NULL) {
+        ip_set_option(conn->pcb.tcp, SOF_REUSEADDR);
+    }
+}
+
+static err_t tcp_apply_reuseaddr(struct netconn *conn)
+{
+    return tcpip_callback_wait(tcp_reuseaddr_update, conn);
+}
+#endif
+
 static void do_connect(Context *ctx, const GenMessage *gen_message)
 {
     GlobalContext *glb = ctx->global;
@@ -1017,6 +1044,7 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     term binary_term = interop_proplist_get_value_default(params, BINARY_ATOM, FALSE_ATOM);
     term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term buffer_term = interop_proplist_get_value(params, BUFFER_ATOM);
+    term reuseaddr_term = interop_proplist_get_value_default(params, REUSEADDR_ATOM, FALSE_ATOM);
 
     avm_int_t port = term_to_int(port_term);
     avm_int_t backlog = term_to_int(backlog_term);
@@ -1040,6 +1068,28 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     if (IS_NULL_PTR(conn)) {
         AVM_ABORT();
     }
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
+    if (reuseaddr_term == TRUE_ATOM) {
+        // SOF_REUSEADDR must be set before bind, as tcp_bind checks it
+        err_t err = tcp_apply_reuseaddr(conn);
+        if (UNLIKELY(err != ERR_OK)) {
+            netconn_delete(conn);
+            socket_data_postinit(platform);
+            do_send_error_reply(ctx, err, ref_ticks, pid);
+            return;
+        }
+    }
+#else
+    if (reuseaddr_term == TRUE_ATOM) {
+        // Unsupported with this ESP-IDF; reject rather than silently
+        // ignoring the option (ERR_ARG is reported as badarg).
+        netconn_delete(conn);
+        socket_data_postinit(platform);
+        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        return;
+    }
+#endif
 
     err_t status = netconn_bind(conn, IP_ADDR_ANY, port);
     if (UNLIKELY(status != ERR_OK)) {

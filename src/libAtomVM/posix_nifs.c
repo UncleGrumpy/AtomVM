@@ -81,6 +81,9 @@ term posix_errno_to_term(int err, GlobalContext *glb)
         case EACCES:
             result = globalcontext_make_atom(glb, ATOM_STR("\x6", "eacces"));
             break;
+        case EADDRINUSE:
+            result = globalcontext_make_atom(glb, ATOM_STR("\xA", "eaddrinuse"));
+            break;
         case EAGAIN:
             result = globalcontext_make_atom(glb, ATOM_STR("\x6", "eagain"));
             break;
