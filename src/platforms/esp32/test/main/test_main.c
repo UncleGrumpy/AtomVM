@@ -688,6 +688,27 @@ TEST_CASE("test_socket", "[test_run]")
     TEST_ASSERT(term_to_int(ret_value) == 0);
 }
 
+TEST_CASE("test_tcp_nodelay", "[test_run]")
+{
+    // esp_netif_init() was called by network_driver_init
+    ESP_LOGI(TAG, "Registering handler\n");
+    network_got_ip = false;
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &got_ip_event_handler, NULL));
+    ESP_LOGI(TAG, "Starting network\n");
+    esp_netif_t *eth_netif = eth_start();
+
+    while (!network_got_ip) {
+        vTaskDelay(1);
+    }
+
+    term ret_value = avm_test_case("test_tcp_nodelay.beam");
+
+    ESP_LOGI(TAG, "Stopping network\n");
+    eth_stop(eth_netif);
+
+    TEST_ASSERT(term_to_int(ret_value) == 0);
+}
+
 TEST_CASE("test_ssl", "[test_run]")
 {
     // esp_netif_init() was called by network_driver_init

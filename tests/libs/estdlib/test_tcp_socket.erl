@@ -35,6 +35,9 @@ test() ->
     ok = test_send_empty(),
     ok = test_connect_refused(),
     ok = test_connect_in_progress(),
+    ok = test_nodelay(),
+    ok = test_nodelay_connected(),
+    ok = test_nodelay_listener(),
     case erlang:system_info(machine) of
         "ATOM" ->
             ok = test_abandon_select(),
@@ -537,10 +540,256 @@ test_setopt_getopt() ->
     {ok, Socket} = socket:open(inet, stream, tcp),
     {ok, stream} = socket:getopt(Socket, {socket, type}),
     ok = socket:setopt(Socket, {socket, reuseaddr}, true),
+    {ok, false} = socket:getopt(Socket, {tcp, nodelay}),
+    ok = socket:setopt(Socket, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(Socket, {tcp, nodelay}),
+    % OTP reports invalid options as {error, {invalid, {socket_option, ...}}},
+    % AtomVM as {error, invalid_value} / {error, invalid_option}.
+    {error, InvalidValue} = socket:setopt(Socket, {tcp, nodelay}, 1),
+    true = (InvalidValue =:= invalid_value) orelse (element(1, InvalidValue) =:= invalid),
+    {ok, true} = socket:getopt(Socket, {tcp, nodelay}),
+    ok = socket:setopt(Socket, {tcp, nodelay}, false),
+    {ok, false} = socket:getopt(Socket, {tcp, nodelay}),
+    {error, InvalidOption} = socket:setopt(Socket, {tcp, unsupported}, true),
+    {error, InvalidOption2} = socket:getopt(Socket, {tcp, unsupported}),
+    true = (InvalidOption =:= invalid_option) orelse (element(1, InvalidOption) =:= invalid),
+    true = (InvalidOption2 =:= invalid_option) orelse (element(1, InvalidOption2) =:= invalid),
+    % Malformed option tuples raise: badarg on AtomVM, {invalid, ...} on BEAM.
+    ok = etest:assert_exception(fun() -> socket:setopt(Socket, {tcp}, true) end),
+    ok = etest:assert_exception(fun() -> socket:getopt(Socket, nodelay) end),
     ok = socket:close(Socket),
     {error, closed} = socket:getopt(Socket, {socket, type}),
     {error, closed} = socket:setopt(Socket, {socket, reuseaddr}, true),
+    {error, closed} = socket:getopt(Socket, {tcp, nodelay}),
+    {error, closed} = socket:setopt(Socket, {tcp, nodelay}, true),
+    {ok, UDP} = socket:open(inet, dgram, udp),
+    {error, _} = socket:setopt(UDP, {tcp, nodelay}, true),
+    {error, _} = socket:getopt(UDP, {tcp, nodelay}),
+    ok = socket:close(UDP),
     ok.
+
+test_nodelay() ->
+    {ok, Socket} = socket:open(inet, stream, tcp),
+
+    % Disable Nagle: small writes flush immediately
+    ok = socket:setopt(Socket, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(Socket, {tcp, nodelay}),
+
+    % Re-enable Nagle
+    ok = socket:setopt(Socket, {tcp, nodelay}, false),
+    {ok, false} = socket:getopt(Socket, {tcp, nodelay}),
+
+    % idempotent re-set
+    ok = socket:setopt(Socket, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(Socket, {tcp, nodelay}),
+
+    % closed socket -> {error, closed}
+    ok = socket:close(Socket),
+    {error, closed} = socket:setopt(Socket, {tcp, nodelay}, true),
+    {error, closed} = socket:getopt(Socket, {tcp, nodelay}),
+
+    % UDP: TCP_NODELAY is not applicable -> error, not a crash
+    {ok, UDPSocket} = socket:open(inet, dgram, udp),
+    {error, _} = socket:setopt(UDPSocket, {tcp, nodelay}, true),
+    {error, _} = socket:getopt(UDPSocket, {tcp, nodelay}),
+    ok = socket:close(UDPSocket),
+
+    ok.
+
+% Nodelay on a connected (client-side) socket
+test_nodelay_connected() ->
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+
+    Parent = self(),
+    {Child, MonitorRef} = spawn_opt(
+        fun() ->
+            {ok, ConnSocket} = socket:accept(ListenSocket),
+            Parent ! {self(), accepted},
+            receive
+                stop -> ok
+            after 5000 ->
+                exit(timeout)
+            end,
+            socket:close(ConnSocket)
+        end,
+        [link, monitor]
+    ),
+
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = socket:connect(ClientSocket, #{family => inet, addr => loopback, port => Port}),
+    receive
+        {Child, accepted} ->
+            ok
+    after 5000 ->
+        throw({timeout, test_nodelay_connected})
+    end,
+
+    % Nagle is enabled by default on a fresh connection
+    {ok, false} = socket:getopt(ClientSocket, {tcp, nodelay}),
+    ok = socket:setopt(ClientSocket, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(ClientSocket, {tcp, nodelay}),
+    ok = socket:setopt(ClientSocket, {tcp, nodelay}, false),
+    {ok, false} = socket:getopt(ClientSocket, {tcp, nodelay}),
+
+    Child ! stop,
+    ok =
+        receive
+            {'DOWN', MonitorRef, process, Child, normal} -> ok
+        after 5000 ->
+            timeout
+        end,
+    socket:close(ClientSocket),
+    socket:close(ListenSocket),
+
+    ok.
+
+% Nodelay on a listening socket: the option is stored in the socket resource,
+% preserved by listen, and applied to the sockets the listener accepts (lwIP).
+test_nodelay_listener() ->
+    etest:flush_msg_queue(),
+
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+
+    % Nagle is enabled by default on a listener
+    {ok, false} = socket:getopt(ListenSocket, {tcp, nodelay}),
+
+    % Setting the option before listen ...
+    ok = socket:setopt(ListenSocket, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(ListenSocket, {tcp, nodelay}),
+
+    % ... is preserved by listen, which replaces the underlying pcb (lwIP)
+    ok = socket:listen(ListenSocket),
+    {ok, true} = socket:getopt(ListenSocket, {tcp, nodelay}),
+
+    % Toggling the option after listen
+    ok = socket:setopt(ListenSocket, {tcp, nodelay}, false),
+    {ok, false} = socket:getopt(ListenSocket, {tcp, nodelay}),
+    ok = socket:setopt(ListenSocket, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(ListenSocket, {tcp, nodelay}),
+
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+
+    % Accept in a child process, nowait: the listener is selecting for accept
+    % while the option is read and updated from here
+    Parent = self(),
+    {Child, MonitorRef} = spawn_opt(
+        fun() ->
+            {select, {select_info, accept, Ref1}} = socket:accept(ListenSocket, nowait),
+            Parent ! {self(), got_nowait},
+            {ok, Accepted1} =
+                receive
+                    {'$socket', ListenSocket, select, Ref1} ->
+                        socket:accept(ListenSocket, 0)
+                after 5000 ->
+                    exit({timeout, accept1})
+                end,
+            Parent ! {self(), {accepted, Accepted1}},
+            {select, {select_info, accept, Ref2}} = socket:accept(ListenSocket, nowait),
+            Parent ! {self(), got_nowait},
+            {ok, Accepted2} =
+                receive
+                    {'$socket', ListenSocket, select, Ref2} ->
+                        socket:accept(ListenSocket, 0)
+                after 5000 ->
+                    exit({timeout, accept2})
+                end,
+            Parent ! {self(), {accepted, Accepted2}},
+            receive
+                stop ->
+                    ok = socket:close(Accepted1),
+                    ok = socket:close(Accepted2),
+                    ok
+            after 5000 ->
+                ok = socket:close(Accepted1),
+                ok = socket:close(Accepted2),
+                exit({timeout, stop})
+            end
+        end,
+        [link, monitor]
+    ),
+    ok =
+        receive
+            {Child, got_nowait} -> ok
+        after 5000 ->
+            throw({timeout, got_nowait1})
+        end,
+    % The listener is selecting for accept: the option is still readable and
+    % settable
+    {ok, true} = socket:getopt(ListenSocket, {tcp, nodelay}),
+    ok = socket:setopt(ListenSocket, {tcp, nodelay}, true),
+
+    {ok, Client1} = socket:open(inet, stream, tcp),
+    ok = socket:connect(Client1, #{family => inet, addr => loopback, port => Port}),
+    {ok, Accepted1} =
+        receive
+            {Child, {accepted, Sock1}} -> {ok, Sock1}
+        after 5000 ->
+            throw({timeout, accepted1})
+        end,
+
+    % The accepted socket keeps the value it was accepted with: the raw-lwIP
+    % implementation (pico) applies the listener's setting to the accepted pcb
+    % at accept time, so the accepted socket must report nodelay = true.  On
+    % BSD implementations inheritance is kernel-dependent (Linux propagates
+    % TCP_NODELAY to the accepted socket, macOS and FreeBSD do not), so there
+    % the value is only checked for stability below.
+    {ok, AcceptedNodelay} = socket:getopt(Accepted1, {tcp, nodelay}),
+    case accepted_nodelay_inherited() of
+        true -> true = AcceptedNodelay;
+        false -> ok
+    end,
+
+    % Changing the listener afterwards does not alter the accepted socket
+    ok = socket:setopt(ListenSocket, {tcp, nodelay}, false),
+    {ok, false} = socket:getopt(ListenSocket, {tcp, nodelay}),
+    {ok, AcceptedNodelay} = socket:getopt(Accepted1, {tcp, nodelay}),
+
+    % The accepted socket changes independently of the listener
+    ok = socket:setopt(Accepted1, {tcp, nodelay}, true),
+    {ok, true} = socket:getopt(Accepted1, {tcp, nodelay}),
+    {ok, false} = socket:getopt(ListenSocket, {tcp, nodelay}),
+
+    % A second accepted socket gets the listener's current setting
+    ok =
+        receive
+            {Child, got_nowait} -> ok
+        after 5000 ->
+            throw({timeout, got_nowait2})
+        end,
+    {ok, Client2} = socket:open(inet, stream, tcp),
+    ok = socket:connect(Client2, #{family => inet, addr => loopback, port => Port}),
+    {ok, Accepted2} =
+        receive
+            {Child, {accepted, Sock2}} -> {ok, Sock2}
+        after 5000 ->
+            throw({timeout, accepted2})
+        end,
+    {ok, false} = socket:getopt(Accepted2, {tcp, nodelay}),
+
+    Child ! stop,
+    ok =
+        receive
+            {'DOWN', MonitorRef, process, Child, normal} -> ok
+        after 5000 ->
+            throw({timeout, listener_accepter_down})
+        end,
+    ok = socket:close(Client2),
+    ok = socket:close(Client1),
+    ok = socket:close(ListenSocket),
+
+    ok.
+
+% Whether an accepted socket is guaranteed to report nodelay = true: the
+% raw-lwIP implementation (pico) applies the listener's setting to the
+% accepted pcb at accept time, regardless of the OS underneath.  On BSD
+% implementations inheritance is kernel-dependent, so the value is not
+% pinned there.
+accepted_nodelay_inherited() ->
+    erlang:system_info(machine) == "ATOM" andalso atomvm:platform() == pico.
 
 %%
 %% connect tests

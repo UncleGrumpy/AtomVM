@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the `espnow` module on ESP32 (opt-in with `CONFIG_AVM_ENABLE_ESPNOW=y`): ESP-NOW frames to
   a peer or broadcast, on the WiFi radio owned by the `network` driver, so ESP-NOW keeps working
   across `network:start/1` and `network:stop/0`
+- Added `{tcp, nodelay}` option to otp_socket
+- Added `{nodelay, Boolean}` option to `gen_tcp:listen/2` and `gen_tcp:connect/3`
+- Added http_server:start_server/3, forwarding listen options (e.g. {nodelay, true}) to gen_tcp:listen/2
 
 ### Changed
 - With BSD sockets (generic_unix, ESP32), `socket:connect/2` returns the reason a connect failed,
@@ -205,6 +208,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rebuilding its poll set was not polled until another one was registered or unregistered
 - Fixed TLS connections with `verify_none` being limited to TLS 1.2 when built
   with MbedTLS 3.6.1 or later and TLS 1.3 support enabled
+- Fixed a use-after-free of the platform data at VM shutdown, when a process owning a
+  socket with a registered select is destroyed after the platform data was freed
 
 ## [0.7.0-beta.0] - 2026-09-28
 

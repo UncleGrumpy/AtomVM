@@ -37,6 +37,7 @@ test() ->
         "BEAM" ->
             ok
     end,
+    ok = test_nodelay(),
     ok.
 
 test_echo_server() ->
@@ -549,4 +550,77 @@ test_send_backpressure() ->
         end,
     Acceptor ! close_server,
     ok = gen_tcp:close(ListenSocket),
+    ok.
+
+test_nodelay() ->
+    lists:foreach(
+        fun(Backend) ->
+            lists:foreach(fun(Value) -> test_nodelay(Backend, Value) end, [false, true]),
+            ok = invalid_option_rejected(fun() -> gen_tcp:listen(0, Backend ++ [{nodelay, invalid}]) end),
+            {ok, UDP} = gen_udp:open(0, Backend),
+            case erlang:system_info(machine) of
+                "ATOM" ->
+                    % AtomVM rejects TCP-only options on UDP sockets.
+                    {error, einval} = inet:setopts(UDP, [{nodelay, true}]),
+                    {error, einval} = inet:getopts(UDP, [nodelay]);
+                _ ->
+                    % BEAM's native inet accepts nodelay on UDP sockets.
+                    ok
+            end,
+            ok = gen_udp:close(UDP)
+        end,
+        [[], [{inet_backend, socket}]]
+    ),
+    ok.
+
+% Invalid options must be rejected: AtomVM drivers return error tuples, while
+% BEAM's native inet/gen_tcp implementations raise badarg variants.
+invalid_option_rejected(F) ->
+    try F() of
+        {ok, _} -> fail;
+        ok -> fail;
+        _ -> ok
+    catch
+        _:_ -> ok
+    end.
+
+test_nodelay(Backend, Value) ->
+    % {inet_backend, ...} must come first: BEAM's gen_tcp rejects option lists
+    % where it does not precede other options.
+    Options = Backend ++ [{active, false}],
+    {ok, Listener} = gen_tcp:listen(0, Options ++ [{nodelay, Value}]),
+    {ok, {_, Port}} = inet:sockname(Listener),
+    {ok, [{nodelay, Value}]} = inet:getopts(Listener, [nodelay]),
+    {ok, Client} = gen_tcp:connect({127, 0, 0, 1}, Port, Options ++ [{nodelay, not Value}]),
+    {ok, Accepted} = gen_tcp:accept(Listener),
+    {ok, [{nodelay, Value}]} = inet:getopts(Accepted, [nodelay]),
+    {ok, [{nodelay, ClientValue}]} = inet:getopts(Client, [nodelay]),
+    true = ClientValue =:= not Value,
+    ok = invalid_option_rejected(
+        fun() -> gen_tcp:connect({127, 0, 0, 1}, Port, Options ++ [{nodelay, invalid}]) end
+    ),
+    ok = invalid_option_rejected(fun() -> inet:setopts(Accepted, [{nodelay, 1}]) end),
+    ok = invalid_option_rejected(fun() -> inet:setopts(Accepted, [{unsupported, true}]) end),
+    ok = invalid_option_rejected(fun() -> inet:setopts(Accepted, invalid) end),
+    ok = invalid_option_rejected(fun() -> inet:getopts(Accepted, [unsupported]) end),
+    {ok, [{nodelay, Value}]} = inet:getopts(Accepted, [nodelay]),
+    ok = inet:setopts(Accepted, [{nodelay, not Value}]),
+    {ok, [{nodelay, ClientValue}]} = inet:getopts(Accepted, [nodelay]),
+    ok = inet:setopts(Accepted, [{nodelay, Value}]),
+    %% Changing a listener affects future accepts, not existing connections.
+    ok = inet:setopts(Listener, [{nodelay, not Value}]),
+    {ok, [{nodelay, ClientValue}]} = inet:getopts(Listener, [nodelay]),
+    {ok, [{nodelay, Value}]} = inet:getopts(Accepted, [nodelay]),
+    {ok, NextClient} = gen_tcp:connect({127, 0, 0, 1}, Port, Options),
+    {ok, [{nodelay, false}]} = inet:getopts(NextClient, [nodelay]),
+    {ok, NextAccepted} = gen_tcp:accept(Listener),
+    {ok, [{nodelay, ClientValue}]} = inet:getopts(NextAccepted, [nodelay]),
+    ok = gen_tcp:close(NextAccepted),
+    ok = gen_tcp:close(NextClient),
+    ok = gen_tcp:close(Accepted),
+    % Closed sockets reject option calls: {error, closed} on AtomVM, einval on BEAM.
+    ok = invalid_option_rejected(inet:setopts(Accepted, [{nodelay, true}])),
+    ok = invalid_option_rejected(inet:getopts(Accepted, [nodelay])),
+    ok = gen_tcp:close(Client),
+    ok = gen_tcp:close(Listener),
     ok.

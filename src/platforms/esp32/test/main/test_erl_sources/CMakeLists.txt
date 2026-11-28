@@ -120,6 +120,7 @@ compile_erlang(test_nvs)
 compile_erlang(test_rtc_slow)
 compile_erlang(test_select)
 compile_erlang(test_socket)
+compile_erlang(test_tcp_nodelay)
 compile_erlang(test_spi)
 if(CONFIG_MBEDTLS_SSL_PROTO_TLS1_3)
     compile_erlang(test_ssl -DTEST_SSL_TLS13)
@@ -159,6 +160,7 @@ set(erlang_test_beams
     test_rtc_slow.beam
     test_select.beam
     test_socket.beam
+    test_tcp_nodelay.beam
     test_spi.beam
     test_ssl.beam
     test_system_architecture.beam
