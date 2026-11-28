@@ -29,10 +29,17 @@ test_chunk() ->
         {"*", ?MODULE, []}
     ],
     Pid = http_server:start_server(8080, Router),
-    {ok, Conn} = connect_client(5),
-    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
-    ok = loop_passive(Conn2, []),
-    exit(Pid, kill),
+    try
+        {ok, Conn} = connect_client(8080, 5),
+        {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+        ok = loop_passive(Conn2, [])
+    after
+        ahttp_client:close(Conn2),
+        case is_pid(Pid) of
+            true -> exit(Pid, kill);
+            false -> ok
+        end
+    end,
     ok.
 
 connect_client(Retries) when Retries > 0 ->
